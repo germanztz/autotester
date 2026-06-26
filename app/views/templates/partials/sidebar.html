@@ -6,19 +6,48 @@
         </button>
     </div>
     {% if projects %}
-        <ul class="list-group list-group-flush project-list">
+        <ul class="list-group list-group-flush project-list" id="project-list">
             {% for project in projects %}
-            <li class="list-group-item project-item" data-project-name="{{ project.name }}">
+            <li class="list-group-item project-item"
+                data-project-name="{{ project.name }}"
+                data-state="{{ project.digest_state }}">
                 <div class="d-flex align-items-center">
-                    <i class="bi bi-file-earmark-pdf text-danger me-2"></i>
+                    {% if project.digest_state == 'complete' %}
+                        <i class="bi bi-check2-circle text-success me-2"></i>
+                    {% elif project.digest_state == 'processing' %}
+                        <i class="bi bi-file-earmark-pdf text-danger me-2"></i>
+                    {% elif project.digest_state == 'cancelled' %}
+                        <i class="bi bi-pause-circle text-warning me-2"></i>
+                    {% elif project.digest_state == 'error' %}
+                        <i class="bi bi-exclamation-triangle text-danger me-2"></i>
+                    {% else %}
+                        <i class="bi bi-file-earmark-pdf text-danger me-2"></i>
+                    {% endif %}
                     <div class="flex-grow-1 text-truncate" title="{{ project.name }}">
                         <div class="fw-semibold text-truncate">{{ project.name }}</div>
-                        <div class="small text-muted">
-                            {{ project.pdf_count }} file{{ '' if project.pdf_count == 1 else 's' }}
-                            · {{ (project.size_bytes / 1024)|round(1) }} KB
+                        <div class="small text-muted project-status">
+                            {% if project.digest_state == 'processing' %}
+                                Processing page {{ project.digest_current_page }} / {{ project.digest_total_pages }}
+                            {% elif project.digest_state == 'complete' %}
+                                Indexed ({{ project.digest_chunks_embedded }} chunks)
+                            {% elif project.digest_state == 'cancelled' %}
+                                Paused at page {{ project.digest_current_page }}
+                            {% elif project.digest_state == 'error' %}
+                                <span class="text-danger">{{ project.digest_error or 'Error' }}</span>
+                            {% else %}
+                                Queued
+                            {% endif %}
                         </div>
                     </div>
                     <div class="project-actions">
+                        {% if project.digest_state == 'processing' %}
+                        <form method="POST" action="{{ url_for('files.cancel_digest', project_name=project.name) }}"
+                              class="d-inline" data-action="cancel">
+                            <button type="submit" class="btn btn-sm btn-link p-1 text-warning" title="Stop digest">
+                                <i class="bi bi-stop-fill"></i>
+                            </button>
+                        </form>
+                        {% endif %}
                         <button type="button" class="btn btn-sm btn-link p-1"
                                 data-bs-toggle="modal" data-bs-target="#renameModal"
                                 data-project="{{ project.name }}" title="Rename">

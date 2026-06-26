@@ -56,6 +56,18 @@ class TestFilesControllerLogging:
             content_type="multipart/form-data",
             headers={"Accept": "application/json"},
         )
+        # Wait for the digest to finish to avoid races on rename.
+        import time
+        runner = client.application.extensions["job_runner"]
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            job_id = runner.find_by_project("renamed")
+            if job_id is None:
+                break
+            snap = runner.get(job_id)
+            if snap["state"] in ("done", "error"):
+                break
+            time.sleep(0.02)
         client.post("/files/renamed/rename", data={"new_name": "renamed2"})
         messages = [r.message for r in autotester_caplog.records]
         assert any("Renamed project" in m and "renamed2" in m for m in messages)
@@ -73,6 +85,18 @@ class TestFilesControllerLogging:
             content_type="multipart/form-data",
             headers={"Accept": "application/json"},
         )
+        # Wait for the lazy digest to finish so the delete is unambiguous.
+        import time
+        runner = client.application.extensions["job_runner"]
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            job_id = runner.find_by_project("doomed")
+            if job_id is None:
+                break
+            snap = runner.get(job_id)
+            if snap["state"] in ("done", "error"):
+                break
+            time.sleep(0.02)
         client.post("/files/doomed/delete")
         messages = [r.message for r in autotester_caplog.records]
         assert any("Deleted project" in m and "doomed" in m for m in messages)

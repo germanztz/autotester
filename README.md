@@ -18,14 +18,17 @@ per-project ChromaDB vector store.
 - **Per-project folders** stored under `./projects/<project_name>/`.
 - **Async AI digest**: PDF text extraction (PyMuPDF) → chunking → embeddings
   (Ollama) → persistence (ChromaDB) running in a background thread.
-- **Live status widget**: shows "Processing PDF... (xx s)" while indexing,
-  then a summary card with pages, chunks and total time.
+- **Lazy per-page digest (#005)**: each PDF page is embedded one at a time,
+  tracked via `### Page N` markers in a markdown sidecar. You can stop a
+  digest mid-flight and resume it later from the sidebar.
+- **Sidebar-driven progress**: live "Processing page X / Y" updates in the
+  project row, with a stop button that leaves remaining markers in place.
 - **Theme switcher**: Light / Dark / System, persisted in `config.yaml`.
 - **AI settings**: Ollama URL, embedding model, chunk size and overlap.
 - **Logging**: configurable level (DEBUG/INFO/WARNING/ERROR/CRITICAL),
   written to stderr. Every user action emits a line.
 - **Toast notifications** for user feedback.
-- **Comprehensive test suite** (174 tests) built with pytest.
+- **Comprehensive test suite** (223 tests) built with pytest.
 
 ## Project layout
 
@@ -44,7 +47,8 @@ autotester/
 │   │   ├── file_manager.py      # Project CRUD on disk
 │   │   └── ai_manager.py        # PDF chunker, Ollama client, AI orchestrator
 │   ├── services/
-│   │   └── job_runner.py        # In-process async job runner
+│   │   ├── job_runner.py        # In-process async job runner
+│   │   └── page_digest.py       # Lazy per-page digest state machine
 │   ├── utils/
 │   │   └── validators.py        # PDF + project-name validators
 │   └── views/
@@ -98,23 +102,26 @@ pytest -v
 ```
 
 The suite covers validators, configuration persistence, file CRUD, AI
-chunker, Ollama HTTP client, async job runner, HTTP routes, end-to-end
-PDF upload flows, logging setup and integration (174 tests). All
-AI-touching tests run offline by substituting a fake Ollama client.
+chunker, Ollama HTTP client (incl. retry), async job runner, lazy per-page
+digest, HTTP routes, end-to-end PDF upload flows, logging setup and
+integration (223 tests). All AI-touching tests run offline by
+substituting a fake Ollama client.
 
 ## Usage
 
 1. Click **File → Open** (or the *Add PDF* button) and choose a project name
    plus a PDF file from your disk.
-2. The PDF is stored under `./projects/<project_name>/`. The AI digest
-   starts immediately in the background; the dashboard shows a live
-   "Processing PDF... (xx s)" counter and replaces it with a summary card
-   (pages, chunks, total time) when done.
-3. In the sidebar you can:
+2. The PDF is stored under `./projects/<project_name>/`. The lazy digest
+   starts immediately in the background; the **sidebar** shows live
+   "Processing page X / Y" updates and a stop button for each project.
+3. The dashboard shows a static welcome message. There is no central
+   progress widget — all digest state lives in the sidebar.
+4. In the sidebar you can:
+   - **Stop** an in-flight digest (stop button next to the project).
    - **Rename** a project (pencil icon) — moves the folder (and its
      ChromaDB index) atomically.
    - **Delete** a project (trash icon) — removes the folder and its PDF.
-4. Click **Configuration** to:
+5. Click **Configuration** to:
    - Pick a **theme** (Light / Dark / System).
    - Configure **AI settings**: Ollama URL, embedding model, chunk size
      and overlap. The page shows an advisory if Ollama is unreachable.

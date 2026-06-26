@@ -82,3 +82,35 @@ class TestConfigManagerValidThemes:
         mgr = ConfigManager(temp_workspace["config"])
         mgr.update(theme=theme)
         assert mgr.get("theme") == theme
+
+
+class TestLoggingSection:
+    def test_defaults_contain_logging_block(self, temp_workspace: dict):
+        mgr = ConfigManager(temp_workspace["config"])
+        cfg = mgr.load()
+        assert "logging" in cfg
+        assert cfg["logging"]["level"] == "INFO"
+
+    def test_update_logging_persists_level(self, temp_workspace: dict):
+        mgr = ConfigManager(temp_workspace["config"])
+        mgr.update_logging(level="DEBUG")
+        on_disk = yaml.safe_load(temp_workspace["config"].read_text())
+        assert on_disk["logging"]["level"] == "DEBUG"
+
+    def test_update_logging_rejects_invalid_level(self, temp_workspace: dict):
+        mgr = ConfigManager(temp_workspace["config"])
+        with pytest.raises(ValueError):
+            mgr.update_logging(level="NOPE")
+
+    def test_update_logging_rejects_unknown_keys(self, temp_workspace: dict):
+        mgr = ConfigManager(temp_workspace["config"])
+        with pytest.raises(ValueError):
+            mgr.update_logging(unknown_field=1)
+
+    @pytest.mark.parametrize("level", ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+    def test_update_logging_accepts_valid_levels(
+        self, temp_workspace: dict, level: str
+    ):
+        mgr = ConfigManager(temp_workspace["config"])
+        mgr.update_logging(level=level)
+        assert mgr.load()["logging"]["level"] == level

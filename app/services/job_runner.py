@@ -20,8 +20,8 @@ from __future__ import annotations
 import time
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
-from threading import Lock
-from typing import Any, Callable
+from threading import Event, Lock
+from typing import Any, Callable, Optional
 
 from app.utils.logging_setup import get_logger
 
@@ -34,11 +34,62 @@ class JobRunner:
     def __init__(self, max_workers: int = 2, ttl_seconds: float = 60.0) -> None:
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ai-job")
         self._jobs: dict[str, dict[str, Any]] = {}
+        self._cancel_events: dict[str, Event] = {}
+        self._project_index: dict[str, str] = {}  # project_name -> job_id
         self._lock = Lock()
         self.ttl_seconds = ttl_seconds
 
+    def is_cancelled(self, job_id: str) -> bool:
+        """Return True if ``cancel(job_id)`` has been called for this job."""
+        with self._lock:
+            event = self._cancel_events.get(job_id)
+            return event is not None and event.is_set()
+
+    def _cancel_events_for(self, job_id: str) -> Event:
+        """Return the cancel Event for a job.
+
+        Workers may call this to obtain the Event and pass it to subroutines
+        for cooperative cancellation. Returns a never-set Event for unknown
+        jobs so calling code doesn't need to handle None.
+        """
+        with self._lock:
+            return self._cancel_events.setdefault(job_id, Event())
+
+    def cancel(self, job_id: str) -> bool:
+        """Signal a running job to stop at the next checkpoint.
+
+        Returns True if a cancel flag was set (or was already set) on a
+        known job; False if the job is unknown or already finished.
+        """
+        with self._lock:
+            if job_id not in self._jobs:
+                return False
+            job = self._jobs[job_id]
+            if job["state"] in ("done", "error"):
+                return False
+            event = self._cancel_events.setdefault(job_id, Event())
+            event.set()
+            logger.info("Job %s cancellation requested", job_id)
+            return True
+
+    def register_project(self, job_id: str, project_name: str) -> None:
+        """Associate ``project_name`` with ``job_id`` for lookup."""
+        with self._lock:
+            self._project_index[project_name] = job_id
+
+    def find_by_project(self, project_name: str) -> Optional[str]:
+        """Return the job_id associated with ``project_name`` or None."""
+        with self._lock:
+            return self._project_index.get(project_name)
+
     def submit(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> str:
-        """Submit a callable. Returns a job_id used to poll status."""
+        """Submit a callable. Returns a job_id used to poll status.
+
+        The callable may cooperate with ``cancel(job_id)`` by calling
+        ``runner.is_cancelled(job_id)`` between steps. The runner exposes
+        the cancel event for the current job so a worker can pass the
+        event into its own subroutines.
+        """
         job_id = uuid.uuid4().hex
         fn_name = getattr(fn, "__name__", repr(fn))
         logger.info("Job %s submitted: %s", job_id, fn_name)
@@ -50,7 +101,11 @@ class JobRunner:
                 "result": None,
                 "error": None,
             }
+            event = self._cancel_events.setdefault(job_id, Event())
 
+        # Bind job_id into the worker closure by passing the event explicitly
+        # to the user callable. If the user wants cooperative cancellation,
+        # they can check ``runner.is_cancelled(job_id)`` themselves.
         def _runner() -> None:
             with self._lock:
                 self._jobs[job_id]["state"] = "running"
@@ -72,7 +127,6 @@ class JobRunner:
             logger.debug("Job %s state -> done", job_id)
 
         future: Future = self._executor.submit(_runner)
-        # Touch the future so unused-variable linters stay quiet.
         future.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
         return job_id
 
@@ -118,6 +172,11 @@ class JobRunner:
                     stale.append(job_id)
             for job_id in stale:
                 del self._jobs[job_id]
+                self._cancel_events.pop(job_id, None)
+                # Remove project_index entries pointing at the stale job.
+                stale_projects = [p for p, j in self._project_index.items() if j == job_id]
+                for p in stale_projects:
+                    del self._project_index[p]
                 removed += 1
         return removed
 

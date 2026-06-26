@@ -167,6 +167,17 @@ class TestUploadThenRename:
             content_type="multipart/form-data",
             headers={"Accept": "application/json"},
         )
+        # Wait for the lazy digest to finish so the rename is unambiguous.
+        runner = client.application.extensions["job_runner"]
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            job_id = runner.find_by_project("old")
+            if job_id is None:
+                break
+            snap = runner.get(job_id)
+            if snap["state"] in ("done", "error"):
+                break
+            time.sleep(0.02)
 
         response = client.post(
             "/files/old/rename",
@@ -190,6 +201,17 @@ class TestUploadThenDelete:
             content_type="multipart/form-data",
             headers={"Accept": "application/json"},
         )
+        # Wait for the lazy digest to finish so the delete is unambiguous.
+        runner = client.application.extensions["job_runner"]
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            job_id = runner.find_by_project("temp")
+            if job_id is None:
+                break
+            snap = runner.get(job_id)
+            if snap["state"] in ("done", "error"):
+                break
+            time.sleep(0.02)
         assert (temp_workspace["projects"] / "temp").is_dir()
 
         response = client.post(

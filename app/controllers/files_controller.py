@@ -1,4 +1,4 @@
-"""Files controller: upload, rename, delete PDF projects."""
+"""Files controller: upload, rename, delete, cancel PDF projects."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -55,8 +55,11 @@ def upload():
         entry.size_bytes,
     )
 
-    # Enqueue async AI digest of the just-saved PDF.
+    # Enqueue async lazy digest of the just-saved PDF. The job runner owns
+# the markdown extraction and page-by-page embedding on a background
+# thread; we only register the project with the runner here.
     ai_manager = current_app.extensions["ai_manager"]
+    lazy_ai_manager = current_app.extensions["lazy_ai_manager"]
     job_runner = current_app.extensions["job_runner"]
     pdfs = sorted(file_manager.project_path(entry.name).glob("*.pdf"))
     if not pdfs:
@@ -66,7 +69,7 @@ def upload():
         flash("PDF not found after upload.", "danger")
         return redirect(url_for("main.index"))
     pdf_path = pdfs[0]
-    job_id = job_runner.submit(ai_manager.digest_pdf, entry.name, pdf_path)
+    job_id = lazy_ai_manager.start(entry.name, job_runner)
     logger.info(
         "AI digest queued: project=%s job_id=%s", entry.name, job_id
     )
@@ -114,4 +117,32 @@ def delete(project_name: str):
 
     logger.info("Deleted project: %s", project_name)
     flash(f"Deleted '{project_name}'.", "success")
+    return redirect(url_for("main.index"))
+
+
+@files_bp.route("/<project_name>/cancel", methods=["POST"])
+def cancel_digest(project_name: str):
+    """Stop the running digest for the given project.
+
+    Cooperative cancellation: the running worker checks the cancel flag
+    between pages and exits cleanly. Remaining ``### Page N`` markers
+    are left in place so the digest can resume later.
+    """
+    job_runner = current_app.extensions["job_runner"]
+    lazy_ai = current_app.extensions["lazy_ai_manager"]
+
+    # Try to cancel via the job registry first (in-flight job).
+    job_id = job_runner.find_by_project(project_name)
+    if job_id:
+        job_runner.cancel(job_id)
+    # Also set the LazyAIManager's own cancel flag — covers cases where
+    # the work hasn't started yet but is queued, or where cancel is
+    # requested via a path that doesn't go through the job registry.
+    lazy_ai.cancel(project_name)
+    logger.info("Digest cancel requested: project=%s", project_name)
+
+    if "application/json" in (request.headers.get("Accept") or ""):
+        return jsonify({"ok": True, "project": project_name})
+
+    flash(f"Stopping digest for '{project_name}'...", "info")
     return redirect(url_for("main.index"))

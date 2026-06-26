@@ -14,6 +14,7 @@ from app.models.ai_manager import AIManager
 from app.models.config_manager import ConfigManager
 from app.models.file_manager import FileManager
 from app.services.job_runner import JobRunner
+from app.services.page_digest import LazyAIManager
 from app.utils.logging_setup import get_logger, setup_logging
 
 
@@ -63,6 +64,7 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
         max_attempts=int(app.config.get("OLLAMA_MAX_ATTEMPTS", 3)),
         backoff_base=float(app.config.get("OLLAMA_BACKOFF_BASE_SECONDS", 1.0)),
     )
+    lazy_ai_manager = LazyAIManager(ai_manager=ai_manager, file_manager=file_manager)
     job_runner = JobRunner(
         max_workers=int(app.config.get("JOB_MAX_WORKERS", 2)),
         ttl_seconds=float(app.config.get("JOB_TTL_SECONDS", 60.0)),
@@ -71,6 +73,7 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     app.extensions["config_manager"] = config_manager
     app.extensions["file_manager"] = file_manager
     app.extensions["ai_manager"] = ai_manager
+    app.extensions["lazy_ai_manager"] = lazy_ai_manager
     app.extensions["job_runner"] = job_runner
 
     @app.context_processor

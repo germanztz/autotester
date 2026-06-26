@@ -13,7 +13,7 @@
 .venv/bin/pip install -r requirements.txt
 
 # Tests
-.venv/bin/python -m pytest tests/ -v          # all 174 tests
+.venv/bin/python -m pytest tests/ -v          # all 223 tests
 .venv/bin/python -m pytest tests/test_x.py    # single file
 .venv/bin/python -m pytest -k pattern         # by name
 
@@ -33,12 +33,32 @@ There is no separate lint/format/typecheck config. CI does not exist.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/` | Dashboard |
-| GET/POST | `/config/` | View/save settings (theme + IA section) |
+| GET/POST | `/config/` | View/save settings (theme + IA section + logging) |
 | POST | `/files/upload` | Upload PDF; returns 202 JSON `{job_id, project}` when `Accept: application/json` is sent, otherwise classic 302 redirect |
 | POST | `/files/<name>/rename` | Rename project folder |
 | POST | `/files/<name>/delete` | Delete project folder |
-| GET | `/ai/status/<job_id>` | Poll async digest job state |
+| POST | `/files/<name>/cancel` | Stop a running lazy digest (cooperative; leaves remaining `### Page N` markers for later resume) |
+| GET | `/ai/status/<job_id>` | Poll legacy async digest job state |
+| GET | `/ai/projects` | JSON list of projects with their current digest state (consumed by sidebar poller) |
 | POST | `/ai/validate` | JSON probe of the Ollama URL; 200 if reachable, 503 if not |
+
+## Lazy digestion pipeline (#005)
+- On upload, `LazyAIManager.start(project, job_runner)` enqueues `run_to_completion`.
+- The first worker step is `extract_to_markdown(pdf_path, md_path)` which writes
+  `projects/<name>/<name>.md` with one `### Page N` marker per page. Idempotent.
+- The loop calls `process_one_page()` which: finds the smallest marker, embeds the
+  page text via Ollama, persists to Chroma (`projects/<name>/chroma.db/`), removes
+  the marker, and updates `projects/<name>/digest.json`.
+- Cancel is cooperative: `LazyAIManager.cancel(project)` sets a `threading.Event`
+  flag checked between pages; `JobRunner.cancel(job_id)` does the same at the
+  runner level. The job exits cleanly with state `cancelled`; remaining markers
+  are left in place so the digest can resume.
+- On every page completion, the sidebar is updated via `/ai/projects` polled
+  every 1 s by `app/views/static/js/sidebar_digest.js`. The polling stops
+  when no project is in `processing` state.
+- `ProjectEntry` carries `digest_state`, `digest_current_page`,
+  `digest_total_pages`, `digest_chunks_embedded`, `digest_error` so the
+  sidebar can show progress and a stop button.
 
 ## Async ingestion pipeline
 - File upload returns immediately with a `job_id`; the digest (PDF text extraction,

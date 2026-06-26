@@ -53,6 +53,25 @@ def _quiet_logger():
     reset_logger()
 
 
+@pytest.fixture(autouse=True)
+def _shutdown_job_runner(app):
+    """Shut down the per-test JobRunner executor to avoid leaking threads.
+
+    Without this, a long-running digest submitted by an upload test can
+    outlive the test function and try to schedule work on an executor
+    that has been garbage-collected, producing spurious
+    ``RuntimeError: cannot schedule new futures after interpreter shutdown``
+    errors.
+
+    Tests use a FakeOllama so the in-flight digest completes almost
+    instantly; ``wait=True`` is safe.
+    """
+    yield
+    runner = app.extensions.get("job_runner")
+    if runner is not None:
+        runner.shutdown(wait=True)
+
+
 @pytest.fixture
 def app(temp_workspace: dict) -> Iterator:
     """Create a Flask app configured for the temp workspace."""

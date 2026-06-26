@@ -12,13 +12,39 @@ Operations:
 from __future__ import annotations
 
 import io
+import json
 import shutil
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, BinaryIO
 
 from app.utils.validators import is_valid_pdf_bytes, safe_project_name
+
+
+_DEFAULT_DIGEST_STATE: dict[str, Any] = {
+    "state": "queued",
+    "current_page": 0,
+    "total_pages": 0,
+    "chunks_embedded": 0,
+    "error": None,
+}
+
+
+def _load_digest_state(project_dir: Path) -> dict[str, Any]:
+    """Read ``digest.json`` and merge with defaults. Returns queued on error."""
+    state_path = project_dir / "digest.json"
+    if not state_path.exists():
+        return dict(_DEFAULT_DIGEST_STATE)
+    try:
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return dict(_DEFAULT_DIGEST_STATE)
+        merged = dict(_DEFAULT_DIGEST_STATE)
+        merged.update({k: v for k, v in data.items() if k in _DEFAULT_DIGEST_STATE})
+        return merged
+    except (json.JSONDecodeError, OSError):
+        return dict(_DEFAULT_DIGEST_STATE)
 
 
 @dataclass
@@ -29,9 +55,24 @@ class ProjectEntry:
     pdf_count: int
     size_bytes: int
     created_at: float
+    digest_state: str = "queued"
+    digest_current_page: int = 0
+    digest_total_pages: int = 0
+    digest_chunks_embedded: int = 0
+    digest_error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "name": self.name,
+            "pdf_count": self.pdf_count,
+            "size_bytes": self.size_bytes,
+            "created_at": self.created_at,
+            "digest_state": self.digest_state,
+            "digest_current_page": self.digest_current_page,
+            "digest_total_pages": self.digest_total_pages,
+            "digest_chunks_embedded": self.digest_chunks_embedded,
+            "digest_error": self.digest_error,
+        }
 
 
 class FileManager:
@@ -51,7 +92,11 @@ class FileManager:
         return self.root / name
 
     def list_projects(self) -> list[ProjectEntry]:
-        """Return all projects (subdirectories containing at least one PDF)."""
+        """Return all projects (subdirectories containing at least one PDF).
+
+        Each entry carries the digest state read from ``digest.json`` so
+        the sidebar can show progress and the stop button.
+        """
         entries: list[ProjectEntry] = []
         if not self.root.exists():
             return entries
@@ -64,12 +109,18 @@ class FileManager:
                 continue
             size = sum((p.stat().st_size for p in pdfs), 0)
             created = path.stat().st_ctime
+            digest = _load_digest_state(path)
             entries.append(
                 ProjectEntry(
                     name=path.name,
                     pdf_count=len(pdfs),
                     size_bytes=size,
                     created_at=created,
+                    digest_state=digest["state"],
+                    digest_current_page=digest["current_page"],
+                    digest_total_pages=digest["total_pages"],
+                    digest_chunks_embedded=digest["chunks_embedded"],
+                    digest_error=digest["error"],
                 )
             )
         return entries

@@ -1,4 +1,4 @@
-"""AI controller: status polling and config validation endpoints."""
+"""AI controller: status polling, project list, and config validation endpoints."""
 from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify, request
@@ -14,6 +14,19 @@ def status(job_id: str):
     """Return the current state of an async digest job."""
     runner = current_app.extensions["job_runner"]
     return jsonify(runner.get(job_id))
+
+
+@ai_bp.route("/projects", methods=["GET"])
+def projects():
+    """Return the list of projects with their current digest state.
+
+    Consumed by the sidebar poller; kept lightweight so 1 Hz polling is OK.
+    Registered at ``/ai/projects`` because the AI blueprint already lives
+    under the ``/ai`` URL prefix.
+    """
+    file_manager = current_app.extensions["file_manager"]
+    entries = [e.to_dict() for e in file_manager.list_projects()]
+    return jsonify({"projects": entries})
 
 
 @ai_bp.route("/validate", methods=["POST"])
