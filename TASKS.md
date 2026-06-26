@@ -4,7 +4,7 @@
 
 ## ✅ Completados
 
-- [x] **#001 - Estructura base de la aplicación**
+✅ **#001 - Estructura base de la aplicación**
   - **Descripción:**
     - Layout principal responsive
     - Menú de navegación superior
@@ -15,7 +15,7 @@
     - Selector de temas (claro/oscuro/sistema)
     - Suite de tests
 
-- [x] **#002 - Integración de IA y Base de Datos Vectorial**
+✅ **#002 - Integración de IA y Base de Datos Vectorial**
   - **Descripción:** 
     Añadir funcionalidades de IA para indexar el contenido de los PDFs en una base de datos vectorial local. Se utilizará Ollama (modelo `qwen3-embedding:4b`) para generar los embeddings y ChromaDB para almacenarlos localmente dentro de la carpeta del proyecto.
   - **Criterios de aceptación:**
@@ -38,17 +38,17 @@
       - Crear los tests necesarios
   - **Prioridad:** Media
 
-- [x] **#003 - BUG: Error when embed file**
+✅ **#003 - BUG: Error when embed file**
   - **Descripción:** 
     - is not createing chrome.db file
     - OllamaUnavailable: Ollama unreachable at http://localhost:11434 
 
-- [x] **#004 - Logging into console**
+✅ **#004 - Logging into console**
   - **Descripción:** 
     - log actions as info
     - add log section with loglevel in config default info
 
-- [x] **005 - Embedding perezoso (lazy) página por página**
+✅ **005 - Embedding perezoso (lazy) página por página**
   - **Descripción:** Modificar el proceso de digestión para que la generación de embeddings sea incremental (página por página) en lugar de procesar todo el documento de una sola vez. Esto actuará como un mecanismo de checkpoint para optimizar memoria y permitir retomar el proceso si se interrumpe.
   - **Criterios de Aceptación:**
     1. **Procesamiento incremental:** No incrustar (embed) todas las páginas del PDF de forma simultánea.
@@ -70,7 +70,7 @@
 ## 📋 Backlog
 
 
-- [ ] **006 - Sistema de cola de digestión con polling y procesamiento secuencial**
+**006 - Sistema de cola de digestión con polling y procesamiento secuencial**
   - **Descripción:** Implementar un mecanismo de fondo que, al iniciar la aplicación y posteriormente cada minuto, revise el estado de todos los proyectos para garantizar que todos los PDFs queden completamente digeridos. Solo se permite un trabajo de digestión activo a la vez en toda la aplicación (una página por vez).
   - **Criterios de Aceptación:**
     1. **Polling periódico:** Al arrancar la aplicación y, posteriormente, cada 60 segundos, comprobar el estado de todos los proyectos existentes.
@@ -83,4 +83,32 @@
     6. **Auto-parada del polling:** Una vez que todos los proyectos estén en estado final (sin marcas pendientes y con el `chroma.db` completo), el sistema debe detener las comprobaciones periódicas.
     7. **Feedback en UI:** El panel izquierdo debe reflejar el estado real de cada proyecto (en cola, procesando página X, completado, error), siguiendo el comportamiento definido en la issue #002.
     8. **Manejo de errores:** Si un proyecto falla durante la digestión, debe marcarse como error y no bloquear el procesamiento de los demás proyectos en la cola.
+  - **Prioridad:** 🟡 Media
+
+**#007 - Unificar botones de guardado en la vista de configuración**
+  - **Descripción:** Refactorizar la vista de configuración para eliminar los múltiples botones de "Guardar" actuales. Implementar un único botón de guardado que persista todos los cambios de la configuración (tema, ajustes de IA, chunking, etc.) en el `config.yaml` de una sola vez.
+  - **Criterios de Aceptación:**
+    1. Eliminar todos los botones de guardado individuales existentes en la página de configuración.
+    2. Añadir un único botón "Save Settings" al final del formulario de configuración.
+    3. Al hacer clic en el botón, se deben validar y guardar todos los campos del formulario en el `config.yaml`.
+    4. Mostrar feedback visual (ej. toast de éxito o error) tras intentar guardar.
+  - **Prioridad:**  🟡 Media
+
+**#008 - Eliminar notificación flotante durante la digestión de PDF**
+  - **Descripción:** Eliminar el toast o notificación flotante que aparece actualmente durante el proceso de digestión del PDF. Dado que el progreso ya se muestra de forma nativa en el panel izquierdo (sidebar) según la issue #002, esta notificación flotante es redundante y ensucia la interfaz.
+  - **Criterios de Aceptación:**
+    1. Identificar y eliminar el componente de notificación flotante (toast/alert) asociado al estado de digestión.
+    2. Verificar que el progreso de la digestión se sigue mostrando correctamente en el sidebar.
+    3. Limpiar cualquier código JavaScript o CSS huérfano que se usara exclusivamente para gestionar esta notificación flotante.
+  - **Prioridad:** 🟡 Media
+
+**#009 - Limpiar panel central y mostrar título del proyecto seleccionado**
+  - **Descripción:** Refactorizar la vista por defecto del panel central para eliminar el "clutter" inicial. El panel central debe dejar de mostrar información estática y su título debe reflejar dinámicamente el proyecto que el usuario tiene seleccionado en el sidebar.
+  - **Criterios de Aceptación:**
+    1. Eliminar el título estático "Dashboard" del panel central.
+    2. Eliminar el mensaje de bienvenida (welcome message).
+    3. Eliminar la indicación de texto "Port 6444" de la parte superior derecha de la pantalla.
+    4. Eliminar el botón "+ Add PDF" a la derecha del titulo del panel central.
+    5. El encabezado/título del panel central debe mostrar dinámicamente el nombre del proyecto seleccionado en el sidebar.
+    6. Si no hay ningún proyecto seleccionado, el panel central debe mostrar un estado vacío limpio (o el nombre de la aplicación) sin los elementos eliminados.
   - **Prioridad:** 🟡 Media
