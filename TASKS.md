@@ -48,11 +48,7 @@
     - log actions as info
     - add log section with loglevel in config default info
 
-## 🔄 En progreso
-
-## 📋 Backlog
-
-- [ ] **005 - Embedding perezoso (lazy) página por página**
+- [x] **005 - Embedding perezoso (lazy) página por página**
   - **Descripción:** Modificar el proceso de digestión para que la generación de embeddings sea incremental (página por página) en lugar de procesar todo el documento de una sola vez. Esto actuará como un mecanismo de checkpoint para optimizar memoria y permitir retomar el proceso si se interrumpe.
   - **Criterios de Aceptación:**
     1. **Procesamiento incremental:** No incrustar (embed) todas las páginas del PDF de forma simultánea.
@@ -70,8 +66,9 @@
        - **Eliminar** cualquier indicador de progreso de la digestión en el panel central.
        - Al finalizar la digestión, mostrar un resumen estático: Creación de la BD y número de elementos (chunks) añadidos.
     9. **Textos de UI en Inglés** (cumplir AGENTS.md).
-  - **Prioridad:** 🟡 Media
-  
+
+## 📋 Backlog
+
 
 - [ ] **006 - Sistema de cola de digestión con polling y procesamiento secuencial**
   - **Descripción:** Implementar un mecanismo de fondo que, al iniciar la aplicación y posteriormente cada minuto, revise el estado de todos los proyectos para garantizar que todos los PDFs queden completamente digeridos. Solo se permite un trabajo de digestión activo a la vez en toda la aplicación (una página por vez).

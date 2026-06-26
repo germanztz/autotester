@@ -13,7 +13,7 @@
 .venv/bin/pip install -r requirements.txt
 
 # Tests
-.venv/bin/python -m pytest tests/ -v          # all 223 tests
+.venv/bin/python -m pytest tests/ -v          # all tests
 .venv/bin/python -m pytest tests/test_x.py    # single file
 .venv/bin/python -m pytest -k pattern         # by name
 
