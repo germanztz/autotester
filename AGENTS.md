@@ -62,3 +62,16 @@ When testing filesystem-touching code, always go through these fixtures; never t
 - No migrations, no database, no external services, no Celery/RQ.
 - No pre-commit hooks, no CI, no Docker.
 - No README instructions beyond install/test/run (see `README.md`).
+
+## Definition of Done
+Any implementation is only considered **done** when **both** hold:
+
+1. **Test written** — at least one pytest test exists that covers the new behavior
+   (happy path + the most relevant edge/error case). Add it to the matching
+   `tests/test_*.py` file or create a new one following the existing naming.
+2. **Tests pass** — `.venv/bin/python -m pytest tests/ -v` exits with all tests
+   green. No skipped, xfail, or `pytest.skip` shortcuts to mask failures.
+
+Run the full suite after every change. Do not declare a feature complete on
+the strength of `pytest -k` against a single keyword — always verify the full
+suite still passes.
