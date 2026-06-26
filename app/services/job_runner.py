@@ -23,6 +23,10 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Lock
 from typing import Any, Callable
 
+from app.utils.logging_setup import get_logger
+
+logger = get_logger()
+
 
 class JobRunner:
     """Run callables asynchronously and report their status."""
@@ -36,6 +40,8 @@ class JobRunner:
     def submit(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> str:
         """Submit a callable. Returns a job_id used to poll status."""
         job_id = uuid.uuid4().hex
+        fn_name = getattr(fn, "__name__", repr(fn))
+        logger.info("Job %s submitted: %s", job_id, fn_name)
         with self._lock:
             self._jobs[job_id] = {
                 "state": "pending",
@@ -49,6 +55,7 @@ class JobRunner:
             with self._lock:
                 self._jobs[job_id]["state"] = "running"
                 self._jobs[job_id]["started_at"] = time.monotonic()
+            logger.debug("Job %s state -> running (%s)", job_id, fn_name)
             try:
                 result = fn(*args, **kwargs)
             except Exception as exc:  # noqa: BLE001 - we deliberately capture all
@@ -56,11 +63,13 @@ class JobRunner:
                     self._jobs[job_id]["state"] = "error"
                     self._jobs[job_id]["error"] = f"{type(exc).__name__}: {exc}"
                     self._jobs[job_id]["finished_at"] = time.monotonic()
+                logger.error("Job %s failed: %s: %s", job_id, type(exc).__name__, exc)
                 return
             with self._lock:
                 self._jobs[job_id]["state"] = "done"
                 self._jobs[job_id]["result"] = result
                 self._jobs[job_id]["finished_at"] = time.monotonic()
+            logger.debug("Job %s state -> done", job_id)
 
         future: Future = self._executor.submit(_runner)
         # Touch the future so unused-variable linters stay quiet.

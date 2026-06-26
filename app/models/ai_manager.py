@@ -17,6 +17,10 @@ from typing import Any, Callable, Iterable
 
 import requests
 
+from app.utils.logging_setup import get_logger
+
+logger = get_logger()
+
 
 # ---------------------------------------------------------------------------
 # Result types
@@ -159,6 +163,7 @@ class OllamaClient:
         """Single HTTP attempt (no retry). Wraps errors as OllamaUnavailable."""
         url = f"{self.base_url}{path}"
         kwargs.setdefault("timeout", self.timeout)
+        logger.debug("HTTP %s %s", method, path)
         try:
             response = self._session.request(method, url, **kwargs)
         except _RETRYABLE_EXC as exc:
@@ -176,6 +181,7 @@ class OllamaClient:
             raise OllamaUnavailable(
                 f"Ollama {method} {path} -> HTTP {response.status_code}: {response.text[:200]}"
             )
+        logger.debug("HTTP %s %s -> %s", method, path, response.status_code)
         return response
 
     def _do_with_retry(self, method: str, path: str, **kwargs: Any) -> Any:
@@ -195,10 +201,25 @@ class OllamaClient:
                 if not transient or attempt >= self.max_attempts:
                     # Re-raise with attempt count for the final failure.
                     if attempt >= self.max_attempts and transient:
+                        logger.warning(
+                            "Ollama %s %s failed after %d attempts: %s",
+                            method,
+                            path,
+                            self.max_attempts,
+                            exc,
+                        )
                         raise OllamaUnavailable(
                             f"{exc} (after {self.max_attempts} attempts)"
                         ) from exc
                     raise
+                logger.debug(
+                    "Ollama %s %s attempt %d/%d failed: %s (retrying)",
+                    method,
+                    path,
+                    attempt,
+                    self.max_attempts,
+                    exc,
+                )
                 time.sleep(self.backoff_base * (2 ** (attempt - 1)))
         # Defensive: loop always returns or raises.
         raise last_exc  # pragma: no cover
@@ -253,6 +274,8 @@ class OllamaClient:
         if self._batch_supported is None:
             self._probe_batch()
 
+        mode = "modern" if self._batch_supported else "legacy"
+        logger.debug("Embedding %d texts via %s endpoint (model=%s)", len(texts), mode, model)
         if self._batch_supported:
             return self._embed_batch_modern(texts, model, batch_size)
         return self._embed_batch_legacy(texts, model)
@@ -383,12 +406,20 @@ class AIManager:
         if not project_dir.exists():
             raise FileNotFoundError(f"Project not found: {project_name}")
 
+        logger.info(
+            "AI digest started: project=%s pdf=%s model=%s chunk_size=%s",
+            project_name,
+            pdf_path,
+            settings["embedding_model"],
+            settings["chunk_size"],
+        )
         started = time.monotonic()
 
         if progress_cb:
             progress_cb({"phase": "extracting", "elapsed": 0.0})
 
         pages = self._extract_pages(pdf_path)
+        logger.debug("Extracted %d pages from %s", len(pages), pdf_path.name)
 
         if progress_cb:
             progress_cb({"phase": "chunking", "elapsed": time.monotonic() - started})
@@ -398,6 +429,7 @@ class AIManager:
             chunk_overlap=int(settings["chunk_overlap"]),
         )
         chunks = chunker.split(pages)
+        logger.debug("Produced %d chunks (chunk_size=%s overlap=%s)", len(chunks), chunker.chunk_size, chunker.chunk_overlap)
 
         if not chunks:
             # No text extracted; nothing to embed. Record zero chunks and exit.
@@ -407,6 +439,12 @@ class AIManager:
                 chunks=0,
                 duration_seconds=round(duration, 3),
                 project_name=project_name,
+            )
+            logger.info(
+                "AI digest finished (no chunks): project=%s pages=%s duration=%.3fs",
+                project_name,
+                len(pages),
+                duration,
             )
             if progress_cb:
                 progress_cb({"phase": "done", "elapsed": duration, "summary": summary.to_dict()})
@@ -442,6 +480,13 @@ class AIManager:
             chunks=len(chunks),
             duration_seconds=round(duration, 3),
             project_name=project_name,
+        )
+        logger.info(
+            "AI digest finished: project=%s pages=%s chunks=%s duration=%.3fs",
+            project_name,
+            len(pages),
+            len(chunks),
+            duration,
         )
         if progress_cb:
             progress_cb({"phase": "done", "elapsed": duration, "summary": summary.to_dict()})

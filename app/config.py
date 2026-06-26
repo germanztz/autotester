@@ -25,5 +25,6 @@ class Config:
     OLLAMA_BATCH_SIZE = 16
     OLLAMA_MAX_ATTEMPTS = 3
     OLLAMA_BACKOFF_BASE_SECONDS = 1.0
+    LOG_LEVEL = "INFO"
     TESTING = False
     DEBUG = False

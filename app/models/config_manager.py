@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 
+from app.utils.logging_setup import VALID_LOG_LEVELS
+
 
 VALID_THEMES = ("light", "dark", "system")
 
@@ -21,14 +23,20 @@ IA_DEFAULTS: dict[str, Any] = {
     "chunk_overlap": 50,
 }
 
+LOGGING_DEFAULTS: dict[str, Any] = {
+    "level": "INFO",
+}
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "theme": "system",
     "app_name": "autotester",
     "auto_refresh": True,
     "ia": deepcopy(IA_DEFAULTS),
+    "logging": deepcopy(LOGGING_DEFAULTS),
 }
 
 _VALID_IA_KEYS = set(IA_DEFAULTS.keys())
+_VALID_LOGGING_KEYS = set(LOGGING_DEFAULTS.keys())
 
 
 def _validate_ia(ia: dict[str, Any]) -> None:
@@ -42,6 +50,16 @@ def _validate_ia(ia: dict[str, Any]) -> None:
         raise ValueError("chunk_size must be a positive integer")
     if not isinstance(chunk_overlap, int) or chunk_overlap < 0 or chunk_overlap >= chunk_size:
         raise ValueError("chunk_overlap must be 0 <= overlap < chunk_size")
+
+
+def _validate_logging(logging_cfg: dict[str, Any]) -> None:
+    """Raise ValueError if the logging section is invalid."""
+    unknown = set(logging_cfg) - _VALID_LOGGING_KEYS
+    if unknown:
+        raise ValueError(f"Unknown logging keys: {sorted(unknown)}")
+    level = logging_cfg.get("level", LOGGING_DEFAULTS["level"])
+    if not isinstance(level, str) or level.upper() not in VALID_LOG_LEVELS:
+        raise ValueError(f"Invalid log level: {level!r}")
 
 
 class ConfigManager:
@@ -84,6 +102,18 @@ class ConfigManager:
         ia_merged["chunk_overlap"] = int(ia_merged["chunk_overlap"])
         merged["ia"] = ia_merged
 
+        # Merge logging defaults for missing keys and sanitize invalid input.
+        logging_cfg = merged.get("logging")
+        if not isinstance(logging_cfg, dict):
+            logging_cfg = {}
+        logging_merged = deepcopy(LOGGING_DEFAULTS)
+        logging_merged.update(
+            {k: v for k, v in logging_cfg.items() if k in _VALID_LOGGING_KEYS}
+        )
+        # Normalize the level value to an uppercase string.
+        logging_merged["level"] = str(logging_merged["level"]).upper()
+        merged["logging"] = logging_merged
+
         if not self.config_path.exists():
             self.save(merged)
 
@@ -121,5 +151,19 @@ class ConfigManager:
         ia.update(kwargs)
         _validate_ia(ia)
         current["ia"] = ia
+        self.save(current)
+        return current
+
+    def update_logging(self, **kwargs: Any) -> dict[str, Any]:
+        """Update logging settings and persist. Validates before saving.
+
+        Unknown keys raise ``ValueError``. ``level`` must be one of
+        ``VALID_LOG_LEVELS`` (DEBUG/INFO/WARNING/ERROR/CRITICAL).
+        """
+        current = self.load()
+        logging_cfg = deepcopy(current.get("logging") or {})
+        logging_cfg.update(kwargs)
+        _validate_logging(logging_cfg)
+        current["logging"] = logging_cfg
         self.save(current)
         return current

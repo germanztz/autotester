@@ -1,6 +1,7 @@
 """pytest configuration and shared fixtures for autotester tests."""
 from __future__ import annotations
 
+import logging
 import shutil
 from pathlib import Path
 from typing import Iterator
@@ -10,6 +11,7 @@ import yaml
 
 from app import create_app
 from app.config import Config
+from app.utils.logging_setup import LOGGER_NAME, reset_logger
 
 
 class TestConfig(Config):
@@ -35,6 +37,20 @@ def temp_workspace(tmp_path: Path) -> Iterator[dict]:
 
     if tmp_path.exists():
         shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def _quiet_logger():
+    """Reset the autotester logger after each test.
+
+    Does NOT touch the level before the test runs, so that the
+    ``caplog`` fixture (which may set the level on the autotester
+    logger) keeps working as expected. The teardown clears any
+    handlers the application code attached during the test to prevent
+    accumulation across tests.
+    """
+    yield
+    reset_logger()
 
 
 @pytest.fixture

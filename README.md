@@ -22,8 +22,10 @@ per-project ChromaDB vector store.
   then a summary card with pages, chunks and total time.
 - **Theme switcher**: Light / Dark / System, persisted in `config.yaml`.
 - **AI settings**: Ollama URL, embedding model, chunk size and overlap.
+- **Logging**: configurable level (DEBUG/INFO/WARNING/ERROR/CRITICAL),
+  written to stderr. Every user action emits a line.
 - **Toast notifications** for user feedback.
-- **Comprehensive test suite** (125 tests) built with pytest.
+- **Comprehensive test suite** (174 tests) built with pytest.
 
 ## Project layout
 
@@ -96,9 +98,9 @@ pytest -v
 ```
 
 The suite covers validators, configuration persistence, file CRUD, AI
-chunker, Ollama HTTP client, async job runner, HTTP routes and end-to-end
-PDF upload flows (125 tests). All AI-touching tests run offline by
-substituting a fake Ollama client.
+chunker, Ollama HTTP client, async job runner, HTTP routes, end-to-end
+PDF upload flows, logging setup and integration (174 tests). All
+AI-touching tests run offline by substituting a fake Ollama client.
 
 ## Usage
 
@@ -116,6 +118,22 @@ substituting a fake Ollama client.
    - Pick a **theme** (Light / Dark / System).
    - Configure **AI settings**: Ollama URL, embedding model, chunk size
      and overlap. The page shows an advisory if Ollama is unreachable.
+   - Set the **log level** (DEBUG for verbose HTTP/embed diagnostics).
+
+## Logging
+
+Application events are logged to stderr at the level configured via the
+**Configuration → Logging** card (default `INFO`). Example output:
+
+```
+2026-06-26 12:34:56 INFO     autotester | autotester starting (log level: INFO, ...)
+2026-06-26 12:35:01 INFO     autotester | Uploaded PDF: project=report file=doc.pdf size_bytes=12345
+2026-06-26 12:35:01 INFO     autotester | AI digest queued: project=report job_id=abc123
+2026-06-26 12:35:08 INFO     autotester | AI digest finished: project=report pages=3 chunks=6 duration=7.123s
+```
+
+Set `AUTOTESTER_LOG_LEVEL=DEBUG` in the environment to override the
+configured level at launch.
 
 ## Configuration file (`config.yaml`)
 
@@ -130,10 +148,12 @@ ia:
   embedding_model: qwen3-embedding:4b
   chunk_size: 500
   chunk_overlap: 50
+logging:
+  level: INFO
 ```
 
 You can edit it manually; missing keys fall back to defaults and an invalid
-`theme` value is corrected to `system`.
+`theme` or `logging.level` value is corrected to the default.
 
 ## License
 

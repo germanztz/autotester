@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify, request
 
+from app.utils.logging_setup import get_logger
+
 ai_bp = Blueprint("ai", __name__)
+logger = get_logger()
 
 
 @ai_bp.route("/status/<job_id>", methods=["GET"])
@@ -24,4 +27,8 @@ def validate():
     payload = request.get_json(silent=True) or {}
     target = payload.get("url")
     ok, msg = ai_manager.validate_ollama(url=target)
+    if ok:
+        logger.info("Ollama reachable: %s", target or ai_manager.get_ia_settings()["ollama_url"])
+    else:
+        logger.warning("Ollama validation failed: %s", msg)
     return jsonify({"ok": ok, "message": msg}), (200 if ok else 503)

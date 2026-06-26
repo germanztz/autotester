@@ -14,6 +14,7 @@ from app.models.ai_manager import AIManager
 from app.models.config_manager import ConfigManager
 from app.models.file_manager import FileManager
 from app.services.job_runner import JobRunner
+from app.utils.logging_setup import get_logger, setup_logging
 
 
 def create_app(config_object: type[Config] | None = None) -> Flask:
@@ -38,6 +39,21 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     projects_dir.mkdir(parents=True, exist_ok=True)
 
     config_manager = ConfigManager(config_path)
+
+    # Configure logging as early as possible so that any later log
+    # statement during app construction is captured.
+    log_level = (
+        os.environ.get("AUTOTESTER_LOG_LEVEL")
+        or config_manager.load().get("logging", {}).get("level", "INFO")
+    )
+    setup_logging(log_level)
+    app.extensions["logger"] = get_logger()
+    get_logger().info(
+        "autotester starting (log level: %s, projects: %s, config: %s)",
+        log_level,
+        projects_dir,
+        config_path,
+    )
     file_manager = FileManager(projects_dir)
     ai_manager = AIManager(
         config_manager=config_manager,

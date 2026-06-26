@@ -13,7 +13,7 @@
 .venv/bin/pip install -r requirements.txt
 
 # Tests
-.venv/bin/python -m pytest tests/ -v          # all 137 tests
+.venv/bin/python -m pytest tests/ -v          # all 174 tests
 .venv/bin/python -m pytest tests/test_x.py    # single file
 .venv/bin/python -m pytest -k pattern         # by name
 
@@ -63,6 +63,31 @@ There is no separate lint/format/typecheck config. CI does not exist.
   `OLLAMA_BACKOFF_BASE_SECONDS` (1.0).
 - Tests use `test_ai_manager.FakeOllama` or `responses`; patch
   `app.models.ai_manager.time.sleep` to keep retry tests fast.
+
+## Logging
+- The `autotester` logger (in `app/utils/logging_setup.py`) is the single
+  sink for application events. It writes to stderr with format
+  `"%(asctime)s %(levelname)-8s %(name)s | %(message)s"`.
+- Level is read from `config.yaml` (`logging.level`, default `INFO`) and
+  re-applied via `setup_logging()` whenever the value is updated through
+  the `/config` UI. Override at launch with
+  `AUTOTESTER_LOG_LEVEL=DEBUG python run.py`.
+- Levels (DEBUG, INFO, WARNING, ERROR, CRITICAL) are validated by
+  `ConfigManager.update_logging()` — invalid values raise `ValueError`.
+- INFO lines: every user action (upload, rename, delete, theme/IA/logging
+  change), Ollama reachability probes, AI digest start/finish, job
+  submission.
+- WARNING lines: Ollama unreachable, invalid config payloads, upload
+  rejections.
+- ERROR lines: exceptions in JobRunner workers, missing files.
+- DEBUG lines (verbose): HTTP method/path/status, Ollama batch endpoint
+  probe result, per-batch embedding mode, retry attempts, PDF extraction
+  details, job state transitions.
+- The logger has `propagate=True` so libraries like pytest's `caplog`
+  capture our records; production deployments should not attach handlers
+  to the root logger or risk duplicate output.
+- Test fixture `_quiet_logger` (autouse in `conftest.py`) clears handlers
+  after each test to prevent handler accumulation across runs.
 
 ## Conventions
 - **All UI and code is in English** (per scope decision).

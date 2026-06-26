@@ -32,7 +32,7 @@
     </div>
 </div>
 
-<div class="card shadow-sm">
+<div class="card shadow-sm mb-3">
     <div class="card-body">
         <h5 class="card-title"><i class="bi bi-cpu"></i> Artificial Intelligence</h5>
         <p class="text-muted small">
@@ -71,6 +71,34 @@
             </div>
             <button type="submit" class="btn btn-primary">
                 <i class="bi bi-check-lg"></i> Save AI settings
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-terminal"></i> Logging</h5>
+        <p class="text-muted small">
+            Application actions are logged to <strong>stderr</strong>. The
+            current level is <code>{{ log_level }}</code>. Use
+            <code>DEBUG</code> to see HTTP requests, chunk counts and retry
+            attempts.
+        </p>
+        <form method="POST" action="{{ url_for('config.update') }}">
+            <div class="mb-3">
+                <label class="form-label" for="log_level">Log level</label>
+                <select class="form-select" id="log_level" name="log_level">
+                    {% for level in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'] %}
+                    <option value="{{ level }}" {% if log_level == level %}selected{% endif %}>{{ level }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">
+                    Override at launch with <code>AUTOTESTER_LOG_LEVEL=DEBUG python run.py</code>.
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg"></i> Save logging settings
             </button>
         </form>
     </div>
