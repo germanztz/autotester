@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# autotester runtime artifacts
+projects/
+config.yaml
+
+# VS Code
+.vscode/

@@ -1,0 +1,45 @@
+<aside class="app-sidebar">
+    <div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
+        <span class="fw-semibold text-uppercase small text-muted">Projects</span>
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#uploadModal" title="Open PDF">
+            <i class="bi bi-plus-lg"></i>
+        </button>
+    </div>
+    {% if projects %}
+        <ul class="list-group list-group-flush project-list">
+            {% for project in projects %}
+            <li class="list-group-item project-item" data-project-name="{{ project.name }}">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-file-earmark-pdf text-danger me-2"></i>
+                    <div class="flex-grow-1 text-truncate" title="{{ project.name }}">
+                        <div class="fw-semibold text-truncate">{{ project.name }}</div>
+                        <div class="small text-muted">
+                            {{ project.pdf_count }} file{{ '' if project.pdf_count == 1 else 's' }}
+                            · {{ (project.size_bytes / 1024)|round(1) }} KB
+                        </div>
+                    </div>
+                    <div class="project-actions">
+                        <button type="button" class="btn btn-sm btn-link p-1"
+                                data-bs-toggle="modal" data-bs-target="#renameModal"
+                                data-project="{{ project.name }}" title="Rename">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <form method="POST" action="{{ url_for('files.delete', project_name=project.name) }}"
+                              class="d-inline"
+                              onsubmit="return confirm('Delete project {{ project.name }}?');">
+                            <button type="submit" class="btn btn-sm btn-link p-1 text-danger" title="Delete">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <div class="p-3 text-center text-muted small">
+            <i class="bi bi-folder2-open d-block fs-3 mb-2"></i>
+            No projects yet.<br>Use <strong>File &raquo; Open</strong> to add a PDF.
+        </div>
+    {% endif %}
+</aside>
