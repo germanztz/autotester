@@ -19,5 +19,7 @@ class Config:
     CONFIG_PATH = str(CONFIG_PATH)
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB upload limit
     ALLOWED_EXTENSIONS = {".pdf"}
+    JOB_MAX_WORKERS = 2
+    JOB_TTL_SECONDS = 60.0
     TESTING = False
     DEBUG = False

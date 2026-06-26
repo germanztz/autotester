@@ -1,7 +1,9 @@
 """Files controller: upload, rename, delete PDF projects."""
 from __future__ import annotations
 
-from flask import Blueprint, current_app, flash, redirect, request, url_for
+from pathlib import Path
+
+from flask import Blueprint, current_app, flash, jsonify, redirect, request, url_for
 
 from app.utils.validators import safe_project_name
 
@@ -10,11 +12,20 @@ files_bp = Blueprint("files", __name__)
 
 @files_bp.route("/upload", methods=["POST"])
 def upload():
-    """Handle a PDF upload and create a new project directory."""
+    """Handle a PDF upload, then enqueue an async AI digest job.
+
+    Returns:
+        - JSON ``{"job_id": str, "project": str}`` with HTTP 202 when the
+          client sent ``Accept: application/json`` (used by the modal JS).
+        - Standard redirect to ``/`` for classic browser form submits.
+    """
     file = request.files.get("pdf")
     project_name = request.form.get("project_name", "").strip()
+    wants_json = "application/json" in (request.headers.get("Accept") or "")
 
     if not file or not file.filename:
+        if wants_json:
+            return jsonify({"error": "No file selected."}), 400
         flash("No file selected.", "danger")
         return redirect(url_for("main.index"))
 
@@ -28,10 +39,21 @@ def upload():
             project_name=safe_name,
         )
     except ValueError as exc:
+        if wants_json:
+            return jsonify({"error": str(exc)}), 400
         flash(str(exc), "danger")
         return redirect(url_for("main.index"))
 
-    flash(f"Uploaded '{entry.name}' successfully.", "success")
+    # Enqueue async AI digest of the just-saved PDF.
+    ai_manager = current_app.extensions["ai_manager"]
+    job_runner = current_app.extensions["job_runner"]
+    pdf_path = next(Path(file_manager.project_path(entry.name)).glob("*.pdf"))
+    job_id = job_runner.submit(ai_manager.digest_pdf, entry.name, pdf_path)
+
+    if wants_json:
+        return jsonify({"job_id": job_id, "project": entry.name}), 202
+
+    flash(f"Uploaded '{entry.name}'. Indexing...", "info")
     return redirect(url_for("main.index"))
 
 

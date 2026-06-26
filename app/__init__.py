@@ -10,8 +10,10 @@ from pathlib import Path
 from flask import Flask
 
 from app.config import Config
+from app.models.ai_manager import AIManager
 from app.models.config_manager import ConfigManager
 from app.models.file_manager import FileManager
+from app.services.job_runner import JobRunner
 
 
 def create_app(config_object: type[Config] | None = None) -> Flask:
@@ -37,9 +39,16 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
 
     config_manager = ConfigManager(config_path)
     file_manager = FileManager(projects_dir)
+    ai_manager = AIManager(config_manager=config_manager, file_manager=file_manager)
+    job_runner = JobRunner(
+        max_workers=int(app.config.get("JOB_MAX_WORKERS", 2)),
+        ttl_seconds=float(app.config.get("JOB_TTL_SECONDS", 60.0)),
+    )
 
     app.extensions["config_manager"] = config_manager
     app.extensions["file_manager"] = file_manager
+    app.extensions["ai_manager"] = ai_manager
+    app.extensions["job_runner"] = job_runner
 
     @app.context_processor
     def inject_globals() -> dict:
@@ -54,9 +63,11 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     from app.controllers.main_controller import main_bp
     from app.controllers.files_controller import files_bp
     from app.controllers.config_controller import config_bp
+    from app.controllers.ai_controller import ai_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(files_bp, url_prefix="/files")
     app.register_blueprint(config_bp, url_prefix="/config")
+    app.register_blueprint(ai_bp, url_prefix="/ai")
 
     return app

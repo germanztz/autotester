@@ -8,13 +8,15 @@
     </button>
 </div>
 
+{% include "partials/processing_status.html" %}
+
 <div class="card shadow-sm">
     <div class="card-body">
         <h5 class="card-title">Welcome to autotester</h5>
         <p class="card-text text-muted mb-0">
             Use the <strong>File &raquo; Open</strong> menu or the button above to add a PDF.
-            Each PDF lives inside its own project folder under <code>projects/</code>.
-            You can edit or delete projects from the sidebar.
+            Each PDF lives inside its own project folder under <code>projects/</code> and is
+            indexed locally using Ollama embeddings stored in ChromaDB.
         </p>
     </div>
 </div>

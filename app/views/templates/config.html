@@ -3,11 +3,11 @@
 {% block content %}
 <h1 class="h3 mb-3"><i class="bi bi-gear"></i> Configuration</h1>
 
-<div class="card shadow-sm">
+<div class="card shadow-sm mb-3">
     <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-palette"></i> Theme</h5>
         <form method="POST" action="{{ url_for('config.update') }}">
-            <div class="mb-4">
-                <label class="form-label fw-semibold">Theme</label>
+            <div class="mb-3">
                 <div class="d-flex gap-3 flex-wrap">
                     {% for value, label, icon in [
                         ('light', 'Light', 'sun'),
@@ -26,7 +26,51 @@
                 <div class="form-text">"System" follows your operating system preference.</div>
             </div>
             <button type="submit" class="btn btn-primary">
-                <i class="bi bi-check-lg"></i> Save
+                <i class="bi bi-check-lg"></i> Save theme
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-cpu"></i> Artificial Intelligence</h5>
+        <p class="text-muted small">
+            PDF ingestion uses <strong>Ollama</strong> for embeddings and
+            <strong>ChromaDB</strong> for local vector storage (per project).
+        </p>
+        <div class="alert alert-{{ 'success' if ollama_ok else 'warning' }} d-flex align-items-center py-2 small">
+            <i class="bi bi-{{ 'check-circle' if ollama_ok else 'exclamation-triangle' }} me-2"></i>
+            <span>{{ ollama_msg }}</span>
+        </div>
+
+        <form method="POST" action="{{ url_for('config.update') }}">
+            <div class="mb-3">
+                <label class="form-label" for="ollama_url">Ollama URL</label>
+                <input type="url" class="form-control" id="ollama_url" name="ollama_url"
+                       value="{{ app_config.ia.ollama_url }}" required>
+                <div class="form-text">Local Ollama instance providing the embedding model.</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="embedding_model">Embedding model</label>
+                <input type="text" class="form-control" id="embedding_model" name="embedding_model"
+                       value="{{ app_config.ia.embedding_model }}" required>
+                <div class="form-text">Available models can be listed via <code>ollama list</code>.</div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-sm-6">
+                    <label class="form-label" for="chunk_size">Chunk size</label>
+                    <input type="number" min="50" max="4000" class="form-control" id="chunk_size" name="chunk_size"
+                           value="{{ app_config.ia.chunk_size }}" required>
+                </div>
+                <div class="col-sm-6">
+                    <label class="form-label" for="chunk_overlap">Chunk overlap</label>
+                    <input type="number" min="0" max="3999" class="form-control" id="chunk_overlap" name="chunk_overlap"
+                           value="{{ app_config.ia.chunk_overlap }}" required>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg"></i> Save AI settings
             </button>
         </form>
     </div>
