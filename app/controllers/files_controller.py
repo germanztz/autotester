@@ -47,7 +47,13 @@ def upload():
     # Enqueue async AI digest of the just-saved PDF.
     ai_manager = current_app.extensions["ai_manager"]
     job_runner = current_app.extensions["job_runner"]
-    pdf_path = next(Path(file_manager.project_path(entry.name)).glob("*.pdf"))
+    pdfs = sorted(file_manager.project_path(entry.name).glob("*.pdf"))
+    if not pdfs:
+        if wants_json:
+            return jsonify({"error": "PDF not found after upload."}), 500
+        flash("PDF not found after upload.", "danger")
+        return redirect(url_for("main.index"))
+    pdf_path = pdfs[0]
     job_id = job_runner.submit(ai_manager.digest_pdf, entry.name, pdf_path)
 
     if wants_json:

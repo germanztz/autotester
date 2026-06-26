@@ -13,7 +13,7 @@
 .venv/bin/pip install -r requirements.txt
 
 # Tests
-.venv/bin/python -m pytest tests/ -v          # all 125 tests
+.venv/bin/python -m pytest tests/ -v          # all 137 tests
 .venv/bin/python -m pytest tests/test_x.py    # single file
 .venv/bin/python -m pytest -k pattern         # by name
 
@@ -49,8 +49,20 @@ There is no separate lint/format/typecheck config. CI does not exist.
 - Frontend polls `/ai/status/<job_id>` every 1 s via `app/views/static/js/ai_status.js`
   and swaps the spinner for a summary card on `done`. Reloading the page loses
   the in-memory job state (intentional per #002 decision).
-- Ollama is invoked via `requests` from `OllamaClient`; the real HTTP client is
-  mocked in tests via `test_ai_manager.FakeOllama` or `responses`.
+- Ollama is invoked via `requests` from `OllamaClient`. Key behaviors:
+  - **Connection pooling** via a shared `requests.Session`.
+  - **Batch endpoint**: probes the modern `/api/embed` (plural, accepts `input: [...]`)
+    on first call; falls back to per-text `/api/embeddings` (singular) on 404.
+    Cached per client instance. Always use the batch path when possible — a
+    single 5-prompt batch takes ~7 s vs. ~50 s sequentially.
+  - **Retry policy**: connection errors, read timeouts and 5xx responses are
+    retried up to 3 times with exponential backoff (1s, 2s, 4s). 4xx errors
+    (e.g., 404 model not found) are NOT retried.
+- Tunables in `app/config.py`: `OLLAMA_PER_REQUEST_TIMEOUT` (60 s),
+  `OLLAMA_BATCH_SIZE` (16), `OLLAMA_MAX_ATTEMPTS` (3),
+  `OLLAMA_BACKOFF_BASE_SECONDS` (1.0).
+- Tests use `test_ai_manager.FakeOllama` or `responses`; patch
+  `app.models.ai_manager.time.sleep` to keep retry tests fast.
 
 ## Conventions
 - **All UI and code is in English** (per scope decision).

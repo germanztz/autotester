@@ -39,7 +39,14 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
 
     config_manager = ConfigManager(config_path)
     file_manager = FileManager(projects_dir)
-    ai_manager = AIManager(config_manager=config_manager, file_manager=file_manager)
+    ai_manager = AIManager(
+        config_manager=config_manager,
+        file_manager=file_manager,
+        request_timeout=float(app.config.get("OLLAMA_PER_REQUEST_TIMEOUT", 60.0)),
+        batch_size=int(app.config.get("OLLAMA_BATCH_SIZE", 16)),
+        max_attempts=int(app.config.get("OLLAMA_MAX_ATTEMPTS", 3)),
+        backoff_base=float(app.config.get("OLLAMA_BACKOFF_BASE_SECONDS", 1.0)),
+    )
     job_runner = JobRunner(
         max_workers=int(app.config.get("JOB_MAX_WORKERS", 2)),
         ttl_seconds=float(app.config.get("JOB_TTL_SECONDS", 60.0)),

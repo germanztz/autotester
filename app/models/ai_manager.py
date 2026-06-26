@@ -3,7 +3,7 @@
 Layered so each concern can be tested independently:
 
     PDFChunker      -> pure function: text -> chunks
-    OllamaClient    -> HTTP wrapper: /api/tags, /api/embeddings
+    OllamaClient    -> HTTP wrapper: /api/tags, /api/embed, /api/embeddings
     AIManager       -> orchestration: extract -> chunk -> embed -> chroma
     DigestSummary   -> result type returned to controllers
 """
@@ -14,6 +14,8 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable
+
+import requests
 
 
 # ---------------------------------------------------------------------------
@@ -108,11 +110,33 @@ class OllamaUnavailable(RuntimeError):
     """Raised when Ollama is not reachable."""
 
 
-class OllamaClient:
-    """Minimal HTTP client for the two endpoints we use.
+# Retry policy for HTTP calls. Connection errors, read timeouts and 5xx
+# responses are retried with exponential backoff (1s, 2s, 4s). 4xx errors
+# (e.g., 404 model not found) are NOT retried — they indicate real config
+# bugs that retrying would just mask.
+_MAX_ATTEMPTS = 3
+_BACKOFF_BASE_SECONDS = 1.0
+_RETRYABLE_EXC: tuple[type[BaseException], ...] = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+)
+_RETRYABLE_HTTP = {500, 502, 503, 504}
 
-    Uses the ``requests`` library. Designed so tests can patch ``requests``
-    via the ``responses`` library or a fake ``Session``.
+
+class OllamaClient:
+    """HTTP client for the Ollama endpoints we use.
+
+    Features:
+    - Connection pooling via a shared ``requests.Session``.
+    - Probes the modern batch endpoint ``/api/embed`` (plural) on first
+      use; falls back to the legacy per-text ``/api/embeddings`` endpoint
+      when the modern one returns 404.
+    - Retries transient failures (connection errors, read timeouts, 5xx)
+      up to three times with exponential backoff (1s, 2s, 4s).
+
+    Tests can override behaviour by passing a ``session=`` (a
+    ``requests.Session`` instance or a mock) and by patching
+    ``app.models.ai_manager.time.sleep``.
     """
 
     def __init__(
@@ -120,39 +144,76 @@ class OllamaClient:
         base_url: str = "http://localhost:11434",
         timeout: float = 30.0,
         session: Any | None = None,
+        max_attempts: int = _MAX_ATTEMPTS,
+        backoff_base: float = _BACKOFF_BASE_SECONDS,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self._session = session  # may be None; we use module-level requests
+        self._session = session or requests.Session()
+        self.max_attempts = max(1, max_attempts)
+        self.backoff_base = backoff_base
+        # None = unprobed; True/False cached after first embed_batch call.
+        self._batch_supported: bool | None = None
 
     def _do(self, method: str, path: str, **kwargs: Any) -> Any:
-        import requests as _requests
-
+        """Single HTTP attempt (no retry). Wraps errors as OllamaUnavailable."""
         url = f"{self.base_url}{path}"
-        sess = self._session or _requests
         kwargs.setdefault("timeout", self.timeout)
         try:
-            response = sess.request(method, url, **kwargs)
-        except _requests.exceptions.RequestException as exc:
+            response = self._session.request(method, url, **kwargs)
+        except _RETRYABLE_EXC as exc:
             raise OllamaUnavailable(f"Ollama unreachable at {self.base_url}") from exc
+        except requests.exceptions.RequestException as exc:
+            raise OllamaUnavailable(
+                f"Ollama {method} {path} -> {type(exc).__name__}: {exc}"
+            ) from exc
 
+        if response.status_code in _RETRYABLE_HTTP:
+            raise OllamaUnavailable(
+                f"Ollama {method} {path} -> HTTP {response.status_code}: {response.text[:200]}"
+            )
         if response.status_code >= 400:
             raise OllamaUnavailable(
                 f"Ollama {method} {path} -> HTTP {response.status_code}: {response.text[:200]}"
             )
         return response
 
+    def _do_with_retry(self, method: str, path: str, **kwargs: Any) -> Any:
+        """Run ``_do`` with retry policy applied."""
+        last_exc: OllamaUnavailable | None = None
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                return self._do(method, path, **kwargs)
+            except OllamaUnavailable as exc:
+                last_exc = exc
+                # Only retry on transient signals: connection/timeout
+                # exceptions are surfaced as "unreachable", 5xx as "HTTP 5xx".
+                transient = (
+                    "unreachable" in str(exc)
+                    or any(f"HTTP {code}" in str(exc) for code in _RETRYABLE_HTTP)
+                )
+                if not transient or attempt >= self.max_attempts:
+                    # Re-raise with attempt count for the final failure.
+                    if attempt >= self.max_attempts and transient:
+                        raise OllamaUnavailable(
+                            f"{exc} (after {self.max_attempts} attempts)"
+                        ) from exc
+                    raise
+                time.sleep(self.backoff_base * (2 ** (attempt - 1)))
+        # Defensive: loop always returns or raises.
+        raise last_exc  # pragma: no cover
+
     def is_available(self) -> bool:
         """Return True if Ollama is reachable and responds 200 to /api/tags."""
         try:
-            self._do("GET", "/api/tags")
+            self._do_with_retry("GET", "/api/tags")
             return True
         except OllamaUnavailable:
             return False
 
     def embed(self, text: str, model: str) -> list[float]:
-        """Return the embedding vector for a single text."""
-        response = self._do(
+        """Return the embedding vector for a single text (legacy endpoint)."""
+        response = self._do_with_retry(
             "POST",
             "/api/embeddings",
             json={"model": model, "prompt": text},
@@ -162,18 +223,63 @@ class OllamaClient:
             raise OllamaUnavailable("Ollama response missing 'embedding'")
         return list(data["embedding"])
 
-    def embed_batch(self, texts: list[str], model: str, batch_size: int = 16) -> list[list[float]]:
-        """Embed multiple texts sequentially in small batches.
+    def _probe_batch(self) -> bool:
+        """Probe whether /api/embed (plural) is supported.
 
-        Sequential to avoid overloading a local Ollama server. Chunk size
-        is bounded so progress callbacks stay responsive.
+        Sends a tiny batch request; on 200 we cache True, on any failure
+        (404 in particular) we cache False and fall back to the legacy
+        per-text endpoint.
+        """
+        try:
+            response = self._do("POST", "/api/embed", json={"model": "probe", "input": ["probe"]})
+            self._batch_supported = response.status_code == 200
+        except OllamaUnavailable:
+            self._batch_supported = False
+        return self._batch_supported
+
+    def embed_batch(
+        self, texts: list[str], model: str, batch_size: int = 16
+    ) -> list[list[float]]:
+        """Embed multiple texts using the best available Ollama endpoint.
+
+        Tries the modern batch endpoint ``/api/embed`` (plural, accepts
+        ``input: [...]``) on first use. If unsupported, falls back to one
+        ``/api/embeddings`` call per text. The choice is cached per client
+        instance.
         """
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
+
+        if self._batch_supported is None:
+            self._probe_batch()
+
+        if self._batch_supported:
+            return self._embed_batch_modern(texts, model, batch_size)
+        return self._embed_batch_legacy(texts, model)
+
+    def _embed_batch_modern(
+        self, texts: list[str], model: str, batch_size: int
+    ) -> list[list[float]]:
         vectors: list[list[float]] = []
         for i in range(0, len(texts), batch_size):
-            for text in texts[i : i + batch_size]:
-                vectors.append(self.embed(text, model))
+            chunk = texts[i : i + batch_size]
+            response = self._do_with_retry(
+                "POST",
+                "/api/embed",
+                json={"model": model, "input": chunk},
+            )
+            data = response.json()
+            if "embeddings" not in data:
+                # Server accepted the endpoint but returned an unexpected
+                # payload; treat as a hard failure.
+                raise OllamaUnavailable("Ollama /api/embed missing 'embeddings'")
+            vectors.extend(list(v) for v in data["embeddings"])
+        return vectors
+
+    def _embed_batch_legacy(self, texts: list[str], model: str) -> list[list[float]]:
+        vectors: list[list[float]] = []
+        for text in texts:
+            vectors.append(self.embed(text, model))
         return vectors
 
 
@@ -192,10 +298,22 @@ class AIManager:
         config_manager: Any,
         file_manager: Any,
         ollama_client: OllamaClient | None = None,
+        request_timeout: float = 60.0,
+        batch_size: int = 16,
+        max_attempts: int = _MAX_ATTEMPTS,
+        backoff_base: float = _BACKOFF_BASE_SECONDS,
     ) -> None:
         self.config_manager = config_manager
         self.file_manager = file_manager
-        self.ollama = ollama_client or OllamaClient()
+        self.request_timeout = request_timeout
+        self.batch_size = batch_size
+        self.max_attempts = max_attempts
+        self.backoff_base = backoff_base
+        self.ollama = ollama_client or OllamaClient(
+            timeout=request_timeout,
+            max_attempts=max_attempts,
+            backoff_base=backoff_base,
+        )
 
     # ----- configuration -------------------------------------------------
 
@@ -217,7 +335,12 @@ class AIManager:
     def validate_ollama(self, url: str | None = None) -> tuple[bool, str]:
         """Check that Ollama is reachable. Returns (ok, message)."""
         target_url = url or self.get_ia_settings()["ollama_url"]
-        client = OllamaClient(base_url=target_url, timeout=5.0)
+        client = OllamaClient(
+            base_url=target_url,
+            timeout=5.0,
+            max_attempts=self.max_attempts,
+            backoff_base=self.backoff_base,
+        )
         if client.is_available():
             return True, f"Ollama reachable at {target_url}"
         return False, f"Ollama not reachable at {target_url}"
@@ -297,6 +420,7 @@ class AIManager:
         vectors = self.ollama.embed_batch(
             [c.text for c in chunks],
             model=settings["embedding_model"],
+            batch_size=self.batch_size,
         )
 
         if progress_cb:

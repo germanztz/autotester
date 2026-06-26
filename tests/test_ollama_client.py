@@ -89,6 +89,14 @@ class TestEmbed:
 class TestEmbedBatch:
     @responses.activate
     def test_embeds_multiple_texts_in_order(self, client: OllamaClient):
+        # First call: probe /api/embed (plural) -> 404 -> fall back to legacy
+        responses.add(
+            responses.POST,
+            f"{BASE}/api/embed",
+            json={"error": "not found"},
+            status=404,
+        )
+        # Then 3 legacy calls, one per text
         for i in range(3):
             responses.add(
                 responses.POST,
@@ -98,7 +106,8 @@ class TestEmbedBatch:
             )
         vectors = client.embed_batch(["a", "b", "c"], model="m", batch_size=2)
         assert vectors == [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0]]
-        assert len(responses.calls) == 3
+        # 1 probe (404) + 3 legacy = 4
+        assert len(responses.calls) == 4
 
     def test_rejects_invalid_batch_size(self, client: OllamaClient):
         with pytest.raises(ValueError):
