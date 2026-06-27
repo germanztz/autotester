@@ -55,13 +55,17 @@ def _quiet_logger():
 
 @pytest.fixture(autouse=True)
 def _shutdown_job_runner(app):
-    """Shut down the per-test JobRunner executor to avoid leaking threads.
+    """Shut down the per-test JobRunner executor and DigestSupervisor.
 
     Without this, a long-running digest submitted by an upload test can
     outlive the test function and try to schedule work on an executor
     that has been garbage-collected, producing spurious
     ``RuntimeError: cannot schedule new futures after interpreter shutdown``
     errors.
+
+    The DigestSupervisor daemon thread must also be stopped here, else a
+    fresh thread from the next ``create_app()`` call would compete with
+    the old one.
 
     Tests use a FakeOllama so the in-flight digest completes almost
     instantly; ``wait=True`` is safe.
@@ -70,6 +74,9 @@ def _shutdown_job_runner(app):
     runner = app.extensions.get("job_runner")
     if runner is not None:
         runner.shutdown(wait=True)
+    supervisor = app.extensions.get("digest_supervisor")
+    if supervisor is not None:
+        supervisor.stop()
 
 
 @pytest.fixture

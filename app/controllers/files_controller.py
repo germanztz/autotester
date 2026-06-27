@@ -55,27 +55,16 @@ def upload():
         entry.size_bytes,
     )
 
-    # Enqueue async lazy digest of the just-saved PDF. The job runner owns
-# the markdown extraction and page-by-page embedding on a background
-# thread; we only register the project with the runner here.
-    ai_manager = current_app.extensions["ai_manager"]
-    lazy_ai_manager = current_app.extensions["lazy_ai_manager"]
-    job_runner = current_app.extensions["job_runner"]
-    pdfs = sorted(file_manager.project_path(entry.name).glob("*.pdf"))
-    if not pdfs:
-        logger.error("PDF not found on disk after upload for project=%s", entry.name)
-        if wants_json:
-            return jsonify({"error": "PDF not found after upload."}), 500
-        flash("PDF not found after upload.", "danger")
-        return redirect(url_for("main.index"))
-    pdf_path = pdfs[0]
-    job_id = lazy_ai_manager.start(entry.name, job_runner)
-    logger.info(
-        "AI digest queued: project=%s job_id=%s", entry.name, job_id
-    )
+    # The new PDF is on disk. The digest supervisor (started by the app
+    # factory) will pick it up on its next iteration; we just kick the
+    # supervisor so it doesn't have to wait the full poll interval before
+    # the first page is embedded.
+    supervisor = current_app.extensions.get("digest_supervisor")
+    if supervisor is not None:
+        supervisor.ensure_running()
 
     if wants_json:
-        return jsonify({"job_id": job_id, "project": entry.name}), 202
+        return jsonify({"project": entry.name, "status": "queued"}), 202
 
     flash(f"Uploaded '{entry.name}'. Indexing...", "info")
     return redirect(url_for("main.index"))
@@ -126,7 +115,8 @@ def cancel_digest(project_name: str):
 
     Cooperative cancellation: the running worker checks the cancel flag
     between pages and exits cleanly. Remaining ``### Page N`` markers
-    are left in place so the digest can resume later.
+    are left in place and the project state is reset to ``queued`` so
+    the supervisor will pick it up on the next scan and resume.
     """
     job_runner = current_app.extensions["job_runner"]
     lazy_ai = current_app.extensions["lazy_ai_manager"]
@@ -139,6 +129,8 @@ def cancel_digest(project_name: str):
     # the work hasn't started yet but is queued, or where cancel is
     # requested via a path that doesn't go through the job registry.
     lazy_ai.cancel(project_name)
+    # Reset digest state to queued so the supervisor will resume.
+    lazy_ai.mark_unfailed(project_name)
     logger.info("Digest cancel requested: project=%s", project_name)
 
     if "application/json" in (request.headers.get("Accept") or ""):

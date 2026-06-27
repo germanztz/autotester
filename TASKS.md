@@ -67,6 +67,10 @@
        - Al finalizar la digestión, mostrar un resumen estático: Creación de la BD y número de elementos (chunks) añadidos.
     9. **Textos de UI en Inglés** (cumplir AGENTS.md).
 
+✅ **#009 - BUG Ollama URL config no se tiene en cuenta**
+  - **Descripción:** la url de ollama se ha cambiado a http://localhost:31434 en la pagina de fonciguracion, pero la conexions falla.
+  se tuede ver un error : ERROR    autotester | Job 9e8f1138eb814116aaacdec11edf9e9c failed: OllamaUnavailable: Ollama unreachable at http://localhost:11434 (after 3 attempts)
+
 ## 📋 Backlog
 
 
@@ -81,7 +85,9 @@
        - El archivo `.md` no contiene ninguna marca `### Page $number` pendiente.
        - Todas las páginas están procesadas e insertadas en el `chroma.db`.
     6. **Auto-parada del polling:** Una vez que todos los proyectos estén en estado final (sin marcas pendientes y con el `chroma.db` completo), el sistema debe detener las comprobaciones periódicas.
-    7. **Feedback en UI:** El panel izquierdo debe reflejar el estado real de cada proyecto (en cola, procesando página X, completado, error), siguiendo el comportamiento definido en la issue #002.
+    7. **Feedback en UI:** El panel izquierdo debe reflejar el estado real de cada proyecto (x = paginas procesadas, y= paginas totales del pdf, status=queued|error):
+       - icono in progress,  en el div project-status :"{x}/{y} {status}" si no está completada la digestion
+       - icono tic verde, en el div project-status : "{y} pages" si está completada la digestion.
     8. **Manejo de errores:** Si un proyecto falla durante la digestión, debe marcarse como error y no bloquear el procesamiento de los demás proyectos en la cola.
   - **Prioridad:** 🟡 Media
 
@@ -112,3 +118,4 @@
     5. El encabezado/título del panel central debe mostrar dinámicamente el nombre del proyecto seleccionado en el sidebar.
     6. Si no hay ningún proyecto seleccionado, el panel central debe mostrar un estado vacío limpio (o el nombre de la aplicación) sin los elementos eliminados.
   - **Prioridad:** 🟡 Media
+

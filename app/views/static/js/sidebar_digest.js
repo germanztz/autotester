@@ -8,24 +8,28 @@
 
     const STATE_ICONS = {
         queued: "bi-file-earmark-pdf text-danger",
-        processing: "bi-file-earmark-pdf text-danger",
+        processing: "bi-hourglass-split text-primary",
         complete: "bi-check2-circle text-success",
         cancelled: "bi-pause-circle text-warning",
         error: "bi-exclamation-triangle text-danger",
+        failed: "bi-exclamation-octagon text-danger",
     };
 
     function statusText(p) {
+        const cp = p.digest_current_page || 0;
+        const tp = p.digest_total_pages || 0;
         switch (p.digest_state) {
-            case "processing":
-                return `Processing page ${p.digest_current_page} / ${p.digest_total_pages}`;
             case "complete":
-                return `Indexed (${p.digest_chunks_embedded} chunks)`;
+                return `${tp} pages`;
+            case "failed":
+                return `${cp}/${tp} failed`;
+            case "processing":
+            case "queued":
             case "cancelled":
-                return `Paused at page ${p.digest_current_page}`;
             case "error":
-                return p.digest_error || "Error";
+                return `${cp}/${tp} ${p.digest_state}`;
             default:
-                return "Queued";
+                return `${cp}/${tp} queued`;
         }
     }
 
@@ -42,8 +46,9 @@
     function renderRow(p) {
         const icon = STATE_ICONS[p.digest_state] || STATE_ICONS.queued;
         const status = escapeHtml(statusText(p));
-        const errorClass = p.digest_state === "error" ? "text-danger" : "";
-        const stopForm = p.digest_state === "processing"
+        const errorClass = (p.digest_state === "error" || p.digest_state === "failed") ? "text-danger" : "";
+        const showStop = ["processing", "queued", "error"].includes(p.digest_state);
+        const stopForm = showStop
             ? `<form method="POST" action="/files/${encodeURIComponent(p.name)}/cancel" class="d-inline" data-action="cancel">
                     <button type="submit" class="btn btn-sm btn-link p-1 text-warning" title="Stop digest">
                         <i class="bi bi-stop-fill"></i>
@@ -91,15 +96,9 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
             renderAll(data.projects || []);
-
-            const anyProcessing = (data.projects || []).some(
-                (p) => p.digest_state === "processing"
-            );
-            if (anyProcessing) {
-                pollTimer = setTimeout(tick, POLL_INTERVAL_MS);
-            } else {
-                pollTimer = null;
-            }
+            // Always poll at 1 Hz so the user immediately sees supervisor
+            // picks (queued/errored → processing) and the new status text.
+            pollTimer = setTimeout(tick, POLL_INTERVAL_MS);
         } catch (err) {
             // Network blip — back off and retry.
             pollTimer = setTimeout(tick, POLL_INTERVAL_ERROR_MS);
@@ -110,9 +109,9 @@
         if (pollTimer) return;
         const list = document.getElementById("project-list");
         if (!list) return;
-        // Only start polling if at least one project is currently processing.
-        const processing = list.querySelector('[data-state="processing"]');
-        if (processing) tick();
+        // Always poll once per second so the user sees supervisor picks
+        // and the new {x}/{y} {status} text as soon as it changes.
+        tick();
     }
 
     document.addEventListener("DOMContentLoaded", () => {

@@ -13,6 +13,7 @@ from app.config import Config
 from app.models.ai_manager import AIManager
 from app.models.config_manager import ConfigManager
 from app.models.file_manager import FileManager
+from app.services.digest_supervisor import DigestSupervisor
 from app.services.job_runner import JobRunner
 from app.services.page_digest import LazyAIManager
 from app.utils.logging_setup import get_logger, setup_logging
@@ -75,6 +76,19 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     app.extensions["ai_manager"] = ai_manager
     app.extensions["lazy_ai_manager"] = lazy_ai_manager
     app.extensions["job_runner"] = job_runner
+
+    digest_supervisor = DigestSupervisor(
+        lazy_ai_manager=lazy_ai_manager,
+        file_manager=file_manager,
+        interval_seconds=float(
+            app.config.get("DIGEST_POLL_INTERVAL_SECONDS", 60.0)
+        ),
+        max_consecutive_failures=int(
+            app.config.get("MAX_CONSECUTIVE_FAILURES", 5)
+        ),
+    )
+    app.extensions["digest_supervisor"] = digest_supervisor
+    digest_supervisor.start()
 
     @app.context_processor
     def inject_globals() -> dict:

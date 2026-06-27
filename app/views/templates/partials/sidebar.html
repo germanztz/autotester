@@ -14,8 +14,10 @@
                 <div class="d-flex align-items-center">
                     {% if project.digest_state == 'complete' %}
                         <i class="bi bi-check2-circle text-success me-2"></i>
+                    {% elif project.digest_state == 'failed' %}
+                        <i class="bi bi-exclamation-octagon text-danger me-2"></i>
                     {% elif project.digest_state == 'processing' %}
-                        <i class="bi bi-file-earmark-pdf text-danger me-2"></i>
+                        <i class="bi bi-hourglass-split text-primary me-2"></i>
                     {% elif project.digest_state == 'cancelled' %}
                         <i class="bi bi-pause-circle text-warning me-2"></i>
                     {% elif project.digest_state == 'error' %}
@@ -26,21 +28,17 @@
                     <div class="flex-grow-1 text-truncate" title="{{ project.name }}">
                         <div class="fw-semibold text-truncate">{{ project.name }}</div>
                         <div class="small text-muted project-status">
-                            {% if project.digest_state == 'processing' %}
-                                Processing page {{ project.digest_current_page }} / {{ project.digest_total_pages }}
-                            {% elif project.digest_state == 'complete' %}
-                                Indexed ({{ project.digest_chunks_embedded }} chunks)
-                            {% elif project.digest_state == 'cancelled' %}
-                                Paused at page {{ project.digest_current_page }}
-                            {% elif project.digest_state == 'error' %}
-                                <span class="text-danger">{{ project.digest_error or 'Error' }}</span>
+                            {% if project.digest_state == 'complete' %}
+                                {{ project.digest_total_pages }} pages
+                            {% elif project.digest_state == 'failed' %}
+                                <span class="text-danger">{{ project.digest_current_page }}/{{ project.digest_total_pages }} failed</span>
                             {% else %}
-                                Queued
+                                {{ project.digest_current_page }}/{{ project.digest_total_pages }} {{ project.digest_state }}
                             {% endif %}
                         </div>
                     </div>
                     <div class="project-actions">
-                        {% if project.digest_state == 'processing' %}
+                        {% if project.digest_state in ('processing', 'queued', 'error') %}
                         <form method="POST" action="{{ url_for('files.cancel_digest', project_name=project.name) }}"
                               class="d-inline" data-action="cancel">
                             <button type="submit" class="btn btn-sm btn-link p-1 text-warning" title="Stop digest">

@@ -332,7 +332,9 @@ class AIManager:
         self.batch_size = batch_size
         self.max_attempts = max_attempts
         self.backoff_base = backoff_base
+        settings = self.get_ia_settings()
         self.ollama = ollama_client or OllamaClient(
+            base_url=settings["ollama_url"],
             timeout=request_timeout,
             max_attempts=max_attempts,
             backoff_base=backoff_base,

@@ -176,9 +176,12 @@ _DEFAULT_STATE: dict[str, Any] = {
     "current_page": 0,
     "total_pages": 0,
     "chunks_embedded": 0,
+    "consecutive_failures": 0,
     "error": None,
     "updated_at": 0.0,
 }
+
+_TERMINAL_STATES = {"complete", "failed"}
 
 
 @dataclass
@@ -271,16 +274,72 @@ class LazyAIManager:
             return {"state": "error", "error": "project not found"}
         return self._load_state(project_name)
 
+    def mark_failed(self, project_name: str, reason: str) -> dict[str, Any]:
+        """Mark the project as ``failed`` (terminal). Used by the supervisor.
+
+        The failure counter is preserved so the user can see how many
+        attempts were made before giving up.
+        """
+        return self._persist_state(
+            project_name,
+            state="failed",
+            error=reason,
+        )
+
+    def mark_unfailed(self, project_name: str) -> dict[str, Any]:
+        """Reset the state to ``queued`` and clear the error message.
+
+        Keeps the current ``consecutive_failures`` counter unchanged so
+        the supervisor can still decide to mark the project terminal if
+        the re-try also fails and crosses the threshold.
+        """
+        state_data = self._load_state(project_name)
+        return self._persist_state(
+            project_name,
+            state="queued",
+            error=None,
+            consecutive_failures=state_data.get("consecutive_failures", 0),
+        )
+
+    def needs_digest(self, project_name: str) -> bool:
+        """Return True if the project still has pending work for the supervisor.
+
+        A project needs digestion when:
+          - the project directory exists AND
+          - the state is not terminal (``complete`` or ``failed``) AND
+          - the ``<name>.md`` file either does not exist or still has
+            ``### Page N`` markers OR the recorded chunks are below the
+            total page count.
+        """
+        if not self._project_dir(project_name).exists():
+            return False
+        state = self._load_state(project_name)
+        if state.get("state") in _TERMINAL_STATES:
+            return False
+        md_path = self._md_path(project_name)
+        if not md_path.exists():
+            return True
+        if not is_complete(md_path):
+            return True
+        total = int(state.get("total_pages", 0))
+        chunks = int(state.get("chunks_embedded", 0))
+        return chunks < total
+
     def process_one_page(
         self, project_name: str, on_progress: Optional[Callable[[dict[str, Any]], None]] = None
     ) -> Optional[dict[str, Any]]:
         """Embed the next pending page; return progress info or ``None`` when done.
 
         On success, removes the corresponding ``### Page N`` marker and
-        updates ``digest.json``. On Ollama failure, transitions the state
-        to ``error`` and re-raises the exception.
+        updates ``digest.json``; also resets ``consecutive_failures`` to 0.
+        On Ollama failure, transitions the state to ``error``, bumps
+        ``consecutive_failures`` and re-raises the exception.
         """
         state = self._load_state(project_name)
+        if state.get("state") == "failed":
+            # Terminal failure: do not attempt to process further.
+            return None
+
         md_path = self._md_path(project_name)
         if not md_path.exists():
             # Nothing to do; treat as complete.
@@ -289,7 +348,11 @@ class LazyAIManager:
 
         page = find_first_pending_page(md_path)
         if page is None:
-            self._persist_state(project_name, state="complete")
+            self._persist_state(
+                project_name,
+                state="complete",
+                consecutive_failures=0,
+            )
             return None
 
         self._persist_state(project_name, state="processing", current_page=page)
@@ -297,10 +360,12 @@ class LazyAIManager:
         try:
             vector = self.ai_manager.ollama.embed(text, model=self.ai_manager.get_ia_settings()["embedding_model"])
         except Exception as exc:  # noqa: BLE001
+            failures = int(state.get("consecutive_failures", 0)) + 1
             self._persist_state(
                 project_name,
                 state="error",
                 error=f"{type(exc).__name__}: {exc}",
+                consecutive_failures=failures,
             )
             raise
 
@@ -317,7 +382,11 @@ class LazyAIManager:
 
         new_chunks = state.get("chunks_embedded", 0) + 1
         info = {"page": page, "chunks_embedded": new_chunks, "state": "processing"}
-        self._persist_state(project_name, chunks_embedded=new_chunks)
+        self._persist_state(
+            project_name,
+            chunks_embedded=new_chunks,
+            consecutive_failures=0,
+        )
 
         if on_progress:
             on_progress({"phase": "page_done", **info})
@@ -418,7 +487,23 @@ class LazyAIManager:
             job_runner.register_project(job_id, project_name)
         return job_id
 
-    def _run_wrapper(self, project_name: str, pdf_path: Path) -> DigestSummary:
-        """Internal wrapper that ensures markdown and runs to completion."""
-        self.ensure_markdown(project_name, pdf_path)
-        return self.run_to_completion(project_name)
+    def _run_wrapper(self, project_name: str, pdf_path: Path) -> dict[str, Any]:
+        """Process a single page for the project.
+
+        Returns a small dict with the page processed (or ``None`` when
+        nothing left to do). Called once per supervisor iteration; the
+        supervisor owns the cross-project loop. If the markdown file is
+        missing, this wrapper generates it from the PDF on the first call.
+        """
+        state = self._load_state(project_name)
+        if state.get("state") == "failed":
+            return {"state": "failed"}
+        try:
+            self.ensure_markdown(project_name, pdf_path)
+        except FileNotFoundError as exc:
+            self.mark_failed(project_name, f"{type(exc).__name__}: {exc}")
+            return {"state": "failed", "error": str(exc)}
+        info = self.process_one_page(project_name)
+        if info is None:
+            return {"state": "complete"}
+        return info
