@@ -145,7 +145,106 @@
 
   ## 📋 Backlog
 
-
+- [ ] **#011 - Config section for game settings in config.yaml**
+  - **Descripción:** Añadir sección `game` en `config.yaml` con: `language` (defecto: `es`), `questions_per_paragraph` (defecto: `5`), `correct_answers_needed` (defecto: `3`), `question_model`.
+  - **Criterios:**
+    1. Campos editables desde la vista `/config/` junto a los existentes.
+    2. Validación: `questions_per_paragraph` > 0, `correct_answers_needed` > 0.
+    3. `update_game()` en `ConfigManager` con persistencia atómica.
+    4. Tests con `caplog` y `temp_workspace`.
   - **Prioridad:** 🟡 Media
 
+- [ ] **#012 - Paragraph splitter (100-150 palabras)**
+  - **Descripción:** Implementar `ParagraphSplitter` que divida el texto extraído de un PDF en párrafos de 100-150 palabras, manteniendo conceptos relacionados juntos.
+  - **Criterios:**
+    1. Función `split_into_paragraphs(text: str) -> list[str]` en `app/services/paragraph_splitter.py`.
+    2. Cada párrafo entre 100-150 palabras (salvo el último si el texto se acaba).
+    3. Heurística básica: no cortar a mitad de frase; agrupar por límite de oración.
+    4. Tests con textos cortos, largos y exactos.
+  - **Prioridad:** 🟡 Media
 
+- [ ] **#013 - Question generation via Ollama**
+  - **Descripción:** Para cada párrafo, generar automáticamente preguntas de los 4 tipos (opción múltiple, V/F, completar frase, abierta corta) usando Ollama. Pre-calcular respuestas correctas. Reintentar 3 veces si la IA falla.
+  - **Criterios:**
+    1. Función `generate_questions(paragraph: str, count: int, model: str, lang: str) -> list[dict]` en `app/services/question_generator.py`.
+    2. Cada pregunta incluye: `type`, `question_text`, `options` (si aplica), `correct_answer`.
+    3. Reintentos: hasta 3 intentos con exponential backoff ante error de Ollama.
+    4. Tests con `FakeOllama` que devuelva JSON válido simulado.
+  - **Prioridad:** 🟡 Media
+
+- [ ] **#014 - Question data model and persistence**
+  - **Descripción:** Definir la estructura de datos para preguntas y progreso. Persistir en `projects/<name>/game.json`.
+  - **Criterios:**
+    1. Campos por pregunta: `id`, `type`, `paragraph_index`, `text`, `options`, `correct_answer`.
+    2. Campos por progreso: `paragraph_states[{index, unlocked, questions_answered_correctly_at_least_once}]`, `question_states[{id, correct_count, assimilated}]`.
+    3. Clase `GameStateManager` en `app/models/game_manager.py` con load/save.
+    4. Tests de persistencia y carga.
+  - **Prioridad:** 🟡 Media
+
+- [ ] **#015 - Game orchestration: pipeline text → paragraphs → questions**
+  - **Descripción:** Tras la digestión (Chromadb completa), ejecutar el pipeline: split en párrafos → generar preguntas para cada párrafo → persistir en `game.json`. Solo ejecutar una vez por proyecto.
+  - **Criterios:**
+    1. El supervisor (o un hook post-digestión) detecta que un proyecto terminó de digerirse y no tiene `game.json` → ejecuta pipeline.
+    2. Logs: `INFO | Generating paragraphs for <project>` / `INFO | Generating questions for paragraph <N>` / `INFO | Game ready for <project>`.
+    3. Si falla la generación (3 intentos), marcar estado `game_error` en el proyecto.
+    4. Tests de integración con FakeOllama.
+  - **Prioridad:** 🟡 Media
+
+- [ ] **#016 - Game logic: paragraph unlock and progression**
+  - **Descripción:** Implementar la lógica de desbloqueo de párrafos y reglas de progresión.
+  - **Criterios:**
+    1. Solo el párrafo 0 comienza desbloqueado.
+    2. Desbloquear párrafo N+1 cuando todas las preguntas del párrafo N han sido respondidas correctamente al menos 1 vez.
+    3. Las preguntas de párrafos anteriores se intercalan con las nuevas hasta alcanzar 3 respuestas correctas (asimilación).
+    4. Progreso = `(total_correct / (num_paragraphs × questions_per_paragraph × 3)) × 100`.
+    5. Función pura `next_question(state) -> question_id` y `apply_answer(state, question_id, answer) -> new_state` testeable sin IO.
+    6. Tests unitarios de la máquina de estados.
+  - **Prioridad:** 🟡 Media
+
+- [ ] **#017 - Game logic: answer validation and feedback**
+  - **Descripción:** Validar respuesta del usuario, devolver feedback inmediato y gestionar el rescheduling de preguntas falladas.
+  - **Criterios:**
+    1. `validate_answer(question, user_answer) -> bool`.
+    2. Si acierta: incrementar `correct_count`; si llega a 3, marcar `assimilated=True`.
+    3. Si falla: no incrementar `correct_count`, la pregunta se reprograma (aparecerá de nuevo tras N preguntas).
+    4. `apply_answer` actualiza `question_states` y persiste automáticamente.
+    5. Tests.
+  - **Prioridad:** 🟡 Media
+
+- [ ] **#018 - UI: Question display in central panel**
+  - **Descripción:** Mostrar preguntas de forma interactiva en el panel central al seleccionar un proyecto con juego activo.
+  - **Criterios:**
+    1. Al seleccionar proyecto en sidebar, si tiene `game.json` cargar la siguiente pregunta.
+    2. Renderizar los 4 tipos de pregunta (múltiple, V/F, completar, abierta).
+    3. Feedback visual inmediato: verde (acierto) / rojo (fallo) + texto explicativo.
+    4. Botón "Next Question" tras el feedback para pasar a la siguiente.
+    5. Si no hay juego (proyecto sin digerir o sin preguntas), mostrar mensaje "Game not ready".
+    6. Tests con `client` y HTML parseado.
+  - **Prioridad:** 🟡 Media
+
+- [ ] **#019 - UI: Progress bar**
+  - **Descripción:** Mostrar barra de progreso 0-100% junto al título del proyecto en el panel central, actualizada tras cada respuesta.
+  - **Criterios:**
+    1. Barra Bootstrap `.progress-bar` animada junto al nombre del proyecto.
+    2. Texto dentro de la barra: `"X%"` o `"X% (Y/Z points)"`.
+    3. Se actualiza vía el JSON de `/ai/projects` o un nuevo endpoint `/game/status/<project>`.
+    4. Tests.
+  - **Prioridad:** 🟡 Media
+
+- [ ] **#020 - UI: Progress reset button**
+  - **Descripción:** Botón en el panel central para reiniciar el progreso del proyecto seleccionado.
+  - **Criterios:**
+    1. Botón "Reset Progress" visible solo cuando hay un proyecto con juego activo.
+    2. Confirmación con modal "¿Estás seguro? Todo el progreso se perderá."
+    3. Al confirmar: resetear `game.json` a estado inicial (0%), mantener preguntas intactas.
+    4. Tests con cliente HTTP.
+  - **Prioridad:** 🟡 Media
+
+- [ ] **#021 - Game state auto-save and resume**
+  - **Descripción:** El estado del juego se guarda automáticamente tras cada respuesta. Al reabrir la aplicación y seleccionar el proyecto, continuar exactamente donde se dejó.
+  - **Criterios:**
+    1. `GameStateManager.save()` llamado automáticamente por `apply_answer`.
+    2. Al seleccionar proyecto, cargar `game.json` y restaurar el estado completo.
+    3. Si no hay `game.json`, mostrar estado vacío / preguntas no generadas.
+    4. Tests de persistencia entre ciclos.
+  - **Prioridad:** 🟡 Media

@@ -67,4 +67,3 @@ Crea una aplicación web completa llamada "autotester" en Python siguiendo estos
 - Proporciona el comando para correr tests
 - Proporciona el comando para iniciar la app en puerto 6444
 
-Genera todo el código necesario listo para ejecutar.
