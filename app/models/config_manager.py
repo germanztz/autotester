@@ -16,11 +16,28 @@ from app.utils.logging_setup import VALID_LOG_LEVELS
 
 VALID_THEMES = ("light", "dark", "system")
 
+_DEFAULT_SYSTEM_PROMPT = (
+    "You are a semantic text analyzer. Your task is to group related concepts "
+    "together, maintain the original meaning and flow, and extract key keywords "
+    "from each text chunk."
+)
+
+_DEFAULT_USER_PROMPT_TPL = (
+    'Analyze the following text chunk. Group related concepts, maintain the '
+    'original meaning and coherence, and extract 3-7 keywords that represent '
+    'the main topics.\n\n'
+    'Text:\n{text}\n\n'
+    'Return ONLY valid JSON with exactly these fields (no markdown, no extra text):\n'
+    '{{"original_text": "the semantically grouped text", "text_keywords": ["kw1", "kw2", ...]}}'
+)
+
 IA_DEFAULTS: dict[str, Any] = {
     "ollama_url": "http://localhost:11434",
-    "embedding_model": "qwen3-embedding:4b",
-    "chunk_size": 500,
+    "ollama_model": "qwen3.5:latest",
+    "chunk_size": 400,
     "chunk_overlap": 50,
+    "system_prompt": _DEFAULT_SYSTEM_PROMPT,
+    "user_prompt_tpl": _DEFAULT_USER_PROMPT_TPL,
 }
 
 LOGGING_DEFAULTS: dict[str, Any] = {
@@ -50,6 +67,14 @@ def _validate_ia(ia: dict[str, Any]) -> None:
         raise ValueError("chunk_size must be a positive integer")
     if not isinstance(chunk_overlap, int) or chunk_overlap < 0 or chunk_overlap >= chunk_size:
         raise ValueError("chunk_overlap must be 0 <= overlap < chunk_size")
+    system_prompt = ia.get("system_prompt", "")
+    if not isinstance(system_prompt, str) or not system_prompt.strip():
+        raise ValueError("system_prompt must be a non-empty string")
+    user_prompt_tpl = ia.get("user_prompt_tpl", "")
+    if not isinstance(user_prompt_tpl, str) or not user_prompt_tpl.strip():
+        raise ValueError("user_prompt_tpl must be a non-empty string")
+    if "{text}" not in user_prompt_tpl:
+        raise ValueError("user_prompt_tpl must contain the {text} placeholder")
 
 
 def _validate_logging(logging_cfg: dict[str, Any]) -> None:

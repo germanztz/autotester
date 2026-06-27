@@ -36,12 +36,12 @@ def validate():
     Accepts an optional JSON body ``{"url": "..."}`` to override the
     configured URL. Returns ``{"ok": bool, "message": str}``.
     """
-    ai_manager = current_app.extensions["ai_manager"]
+    segmenter = current_app.extensions["segmenter"]
     payload = request.get_json(silent=True) or {}
     target = payload.get("url")
-    ok, msg = ai_manager.validate_ollama(url=target)
+    ok, msg = segmenter.validate_ollama(url=target)
     if ok:
-        logger.info("Ollama reachable: %s", target or ai_manager.get_ia_settings()["ollama_url"])
+        logger.info("Ollama reachable: %s", target or segmenter._get_ia_settings()["ollama_url"])
     else:
         logger.warning("Ollama validation failed: %s", msg)
     return jsonify({"ok": ok, "message": msg}), (200 if ok else 503)

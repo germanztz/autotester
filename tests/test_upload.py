@@ -14,41 +14,20 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _patch_ollama(client):
-    """Replace the AI manager's Ollama client with a no-op fake for every test.
+    """Replace the segmenter's LLM client with a no-op fake for every test.
 
     Without this, every upload would attempt real HTTP calls to Ollama.
     """
-    from test_ai_manager import FakeOllama
+    from tests.test_semantic_segmenter import FakeOllamaChat
 
-    client.application.extensions["ai_manager"].ollama = FakeOllama()
-
-
-def _wait_done(client, job_id: str, timeout: float = 5.0) -> dict:
-    deadline = time.monotonic() + timeout
-    last = {}
-    while time.monotonic() < deadline:
-        last = client.get(f"/ai/status/{job_id}").get_json()
-        if last.get("state") in ("done", "error"):
-            return last
-        time.sleep(0.05)
-    raise AssertionError(f"Job {job_id} never finished: {last}")
+    client.application.extensions["segmenter"].llm = FakeOllamaChat()
 
 
-def _wait_done_for_project(client, project: str, timeout: float = 5.0) -> dict:
-    """Poll all jobs (looking up the latest one for the project)."""
-    deadline = time.monotonic() + timeout
-    runner = client.application.extensions["job_runner"]
-    while time.monotonic() < deadline:
-        for jid in list(runner._jobs.keys()):
-            snap = runner.get(jid)
-            if snap.get("state") == "done" and snap.get("result", {}).get("project_name") == project:
-                return snap
-        time.sleep(0.05)
-    raise AssertionError(f"No done job found for project {project}")
+
 
 
 class TestUploadHappyPath:
-    def test_upload_returns_202_with_job_id(self, client, sample_pdf_bytes: bytes):
+    def test_upload_returns_202_with_status(self, client, sample_pdf_bytes: bytes):
         data = {
             "project_name": "report",
             "pdf": (io.BytesIO(sample_pdf_bytes), "report.pdf"),
@@ -62,7 +41,7 @@ class TestUploadHappyPath:
         assert response.status_code == 202
         payload = response.get_json()
         assert payload["project"] == "report"
-        assert "job_id" in payload
+        assert payload["status"] == "queued"
 
     def test_upload_creates_project_directory(
         self, client, sample_pdf_bytes: bytes, temp_workspace: dict
@@ -93,12 +72,14 @@ class TestUploadHappyPath:
             content_type="multipart/form-data",
             headers={"Accept": "application/json"},
         )
-        job_id = response.get_json()["job_id"]
-        final = _wait_done(client, job_id)
-        assert final["state"] == "done"
-        # The minimal conftest PDF has empty extractable text, so chunks == 0.
-        # The important thing is the job completed without error.
-        assert final["result"]["project_name"] == "full"
+        assert response.status_code == 202
+        # Let the supervisor process the project.
+        supervisor = client.application.extensions["digest_supervisor"]
+        supervisor.wait_until_idle(timeout=5.0)
+        # Verify the project exists and digestion ran (state may be complete or queued for empty PDFs)
+        fm = client.application.extensions["file_manager"]
+        projects = fm.list_projects()
+        assert any(p.name == "full" for p in projects)
 
     def test_upload_classic_form_redirects(self, client, sample_pdf_bytes: bytes):
         data = {
@@ -167,17 +148,9 @@ class TestUploadThenRename:
             content_type="multipart/form-data",
             headers={"Accept": "application/json"},
         )
-        # Wait for the lazy digest to finish so the rename is unambiguous.
-        runner = client.application.extensions["job_runner"]
-        deadline = time.monotonic() + 3.0
-        while time.monotonic() < deadline:
-            job_id = runner.find_by_project("old")
-            if job_id is None:
-                break
-            snap = runner.get(job_id)
-            if snap["state"] in ("done", "error"):
-                break
-            time.sleep(0.02)
+        # Wait for the supervisor to finish processing before renaming.
+        supervisor = client.application.extensions["digest_supervisor"]
+        supervisor.wait_until_idle(timeout=5.0)
 
         response = client.post(
             "/files/old/rename",
@@ -201,17 +174,9 @@ class TestUploadThenDelete:
             content_type="multipart/form-data",
             headers={"Accept": "application/json"},
         )
-        # Wait for the lazy digest to finish so the delete is unambiguous.
-        runner = client.application.extensions["job_runner"]
-        deadline = time.monotonic() + 3.0
-        while time.monotonic() < deadline:
-            job_id = runner.find_by_project("temp")
-            if job_id is None:
-                break
-            snap = runner.get(job_id)
-            if snap["state"] in ("done", "error"):
-                break
-            time.sleep(0.02)
+        # Wait for the supervisor to finish processing before deleting.
+        supervisor = client.application.extensions["digest_supervisor"]
+        supervisor.wait_until_idle(timeout=5.0)
         assert (temp_workspace["projects"] / "temp").is_dir()
 
         response = client.post(

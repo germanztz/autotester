@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from app.services.page_digest import LazyAIManager, find_first_pending_page, is_complete
+from app.services.digest_engine import LazyAIManager
 from app.utils.logging_setup import get_logger
 
 logger = get_logger()
@@ -227,10 +227,24 @@ class DigestSupervisor:
         Errors and exceptions are caught here so the supervisor never
         crashes the worker loop.
         """
-        # Recover from a previous non-terminal failure: clear the counter
-        # before retrying so a streak of failures is fresh each retry.
         state = self.lazy_ai_manager.project_status(project_name)
+        # If the project was explicitly marked terminal, skip immediately.
+        if state.get("state") == "failed":
+            return {"ok": False, "error": state.get("error", ""), "terminal_failed": True}
+        # Recover from a previous non-terminal failure so we can retry.
         if state.get("state") == "error":
+            current_failures = int(state.get("consecutive_failures", 0))
+            if current_failures >= self.max_consecutive_failures:
+                self.lazy_ai_manager.mark_failed(
+                    project_name,
+                    f"Terminal failure after {current_failures} consecutive errors",
+                )
+                logger.error(
+                    "Digest supervisor marked %s as failed after %d attempts",
+                    project_name,
+                    current_failures,
+                )
+                return {"ok": False, "error": "terminal failure", "terminal_failed": True}
             self.lazy_ai_manager.mark_unfailed(project_name)
 
         pdf_path = self.lazy_ai_manager.project_pdf_path(project_name)
@@ -244,12 +258,12 @@ class DigestSupervisor:
             return {"ok": False, "error": reason, "terminal_failed": True}
 
         try:
-            self.lazy_ai_manager.ensure_markdown(project_name, pdf_path)
+            self.lazy_ai_manager.ensure_cache(project_name, pdf_path)
         except FileNotFoundError as exc:
             reason = f"{type(exc).__name__}: {exc}"
             self.lazy_ai_manager.mark_failed(project_name, reason)
             logger.warning(
-                "Digest supervisor marked project as failed (markdown): %s: %s",
+                "Digest supervisor marked project as failed (cache): %s: %s",
                 project_name,
                 exc,
             )
@@ -257,31 +271,25 @@ class DigestSupervisor:
         except Exception as exc:  # noqa: BLE001
             reason = f"{type(exc).__name__}: {exc}"
             logger.error(
-                "Digest supervisor markdown extraction failed for %s: %s",
+                "Digest supervisor text extraction failed for %s: %s",
                 project_name,
                 reason,
             )
-            # Extraction errors are not counted against the page-failure
-            # threshold; just record them and let the next scan retry.
             self._bump_failure(project_name, reason)
             return {"ok": False, "error": reason, "terminal_failed": False}
 
         try:
-            proj_dir = self.file_manager.project_path(project_name)
-            md_path = proj_dir / f"{project_name}.md"
-            page = find_first_pending_page(md_path) if md_path.exists() else None
-            if page is not None:
+            logger.info(
+                "Starting semantic segmentation | Document: %s",
+                project_name,
+            )
+            chunk_t0 = time.monotonic()
+            info = self.lazy_ai_manager.process_one_chunk(project_name)
+            chunk_elapsed = (time.monotonic() - chunk_t0) * 1000
+            if info is not None:
                 logger.info(
-                    "Starting digestion | Document: %s | Page: %s",
-                    project_name, page,
-                )
-            page_t0 = time.monotonic()
-            info = self.lazy_ai_manager.process_one_page(project_name)
-            page_elapsed = (time.monotonic() - page_t0) * 1000
-            if page is not None:
-                logger.info(
-                    "Finished digestion | Document: %s | Page: %s | Duration: %.0fms",
-                    project_name, page, page_elapsed,
+                    "Finished semantic segmentation | Document: %s | Chunk: %s/%s | Duration: %.0fms",
+                    project_name, info.get("chunk"), info.get("total_chunks"), chunk_elapsed,
                 )
         except Exception as exc:  # noqa: BLE001
             # process_one_page has already bumped consecutive_failures
@@ -297,9 +305,15 @@ class DigestSupervisor:
             return {"ok": False, "error": reason, "terminal_failed": terminal}
 
         if info is None:
-            # Nothing left to process for this project. Mark complete so
-            # needs_digest() returns False on the next scan.
             state_now = self.lazy_ai_manager.project_status(project_name)
+            # If the project was explicitly marked terminal ("failed"),
+            # respect that — do not override to "complete".
+            if state_now.get("state") == "failed":
+                logger.error(
+                    "Digest supervisor: project %s is in terminal failed state",
+                    project_name,
+                )
+                return {"ok": False, "error": state_now.get("error", ""), "terminal_failed": True}
             if state_now.get("state") != "complete":
                 self.lazy_ai_manager._persist_state(  # type: ignore[attr-defined]
                     project_name,
@@ -383,6 +397,3 @@ class DigestSupervisor:
         return False
 
 
-def is_project_complete(md_path: Path) -> bool:
-    """Helper re-exported for tests; delegates to ``is_complete``."""
-    return is_complete(md_path)

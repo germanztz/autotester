@@ -33,8 +33,8 @@
     <div class="card-body">
         <h5 class="card-title"><i class="bi bi-cpu"></i> Artificial Intelligence</h5>
         <p class="text-muted small">
-            PDF ingestion uses <strong>Ollama</strong> for embeddings and
-            <strong>ChromaDB</strong> for local vector storage (per project).
+            PDF ingestion uses a local <strong>LLM</strong> (via Ollama) for
+            semantic segmentation and keyword extraction.
         </p>
         <div class="alert alert-{{ 'success' if ollama_ok else 'warning' }} d-flex align-items-center py-2 small">
             <i class="bi bi-{{ 'check-circle' if ollama_ok else 'exclamation-triangle' }} me-2"></i>
@@ -48,10 +48,10 @@
                 <div class="form-text">Local Ollama instance providing the embedding model.</div>
             </div>
             <div class="mb-3">
-                <label class="form-label" for="embedding_model">Embedding model</label>
-                <input type="text" class="form-control" id="embedding_model" name="embedding_model"
-                       value="{{ app_config.ia.embedding_model }}" required>
-                <div class="form-text">Available models can be listed via <code>ollama list</code>.</div>
+                <label class="form-label" for="ollama_model">Ollama model</label>
+                <input type="text" class="form-control" id="ollama_model" name="ollama_model"
+                       value="{{ app_config.ia.ollama_model }}" required>
+                <div class="form-text">The LLM used for semantic segmentation and keyword extraction.</div>
             </div>
             <div class="row g-3 mb-3">
                 <div class="col-sm-6">
@@ -63,6 +63,28 @@
                     <label class="form-label" for="chunk_overlap">Chunk overlap</label>
                     <input type="number" min="0" max="3999" class="form-control" id="chunk_overlap" name="chunk_overlap"
                            value="{{ app_config.ia.chunk_overlap }}" required>
+                </div>
+            </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-chat-quote"></i> Prompts</h5>
+        <p class="text-muted small">
+            These templates are sent to the LLM for every chunk. Edit them
+            to change how the model segments text and extracts keywords.
+        </p>
+            <div class="mb-3">
+                <label class="form-label" for="system_prompt">System prompt</label>
+                <textarea class="form-control font-monospace" id="system_prompt" name="system_prompt" rows="4">{{ app_config.ia.system_prompt }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="user_prompt_tpl">User prompt template</label>
+                <textarea class="form-control font-monospace" id="user_prompt_tpl" name="user_prompt_tpl" rows="8">{{ app_config.ia.user_prompt_tpl }}</textarea>
+                <div class="form-text">
+                    Use <code>{text}</code> as a placeholder for the chunk content.
+                    Use <code>&#123;&#123; &#125;&#125;</code> for literal JSON braces.
                 </div>
             </div>
     </div>

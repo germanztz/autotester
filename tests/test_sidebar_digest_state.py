@@ -12,9 +12,11 @@ from app.models.file_manager import FileManager
 def _write_state(project_dir: Path, **fields) -> None:
     state = {
         "state": "queued",
-        "current_page": 0,
-        "total_pages": 0,
-        "chunks_embedded": 0,
+        "total_words": 0,
+        "last_index": 0,
+        "total_chunks": 0,
+        "chunks_processed": 0,
+        "total_keywords": 0,
         "error": None,
         "updated_at": 0.0,
     }
@@ -34,9 +36,11 @@ class TestListProjectsWithDigestState:
         e = entries[0]
         assert e.name == "fresh"
         assert e.digest_state == "queued"
-        assert e.digest_current_page == 0
-        assert e.digest_total_pages == 0
-        assert e.digest_chunks_embedded == 0
+        assert e.digest_total_words == 0
+        assert e.digest_last_index == 0
+        assert e.digest_total_chunks == 0
+        assert e.digest_chunks_processed == 0
+        assert e.digest_total_keywords == 0
         assert e.digest_error is None
 
     def test_project_with_processing_state(self, temp_workspace):
@@ -44,23 +48,27 @@ class TestListProjectsWithDigestState:
         proj = temp_workspace["projects"] / "p"
         proj.mkdir()
         (proj / "x.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
-        _write_state(proj, state="processing", current_page=2, total_pages=5, chunks_embedded=2)
+        _write_state(proj, state="processing", total_words=1000, last_index=300, total_chunks=5, chunks_processed=2, total_keywords=8)
 
         entries = fm.list_projects()
         assert entries[0].digest_state == "processing"
-        assert entries[0].digest_current_page == 2
-        assert entries[0].digest_total_pages == 5
+        assert entries[0].digest_total_words == 1000
+        assert entries[0].digest_last_index == 300
+        assert entries[0].digest_total_chunks == 5
+        assert entries[0].digest_chunks_processed == 2
+        assert entries[0].digest_total_keywords == 8
 
     def test_project_with_complete_state(self, temp_workspace):
         fm = FileManager(temp_workspace["projects"])
         proj = temp_workspace["projects"] / "done"
         proj.mkdir()
         (proj / "x.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
-        _write_state(proj, state="complete", total_pages=4, chunks_embedded=4)
+        _write_state(proj, state="complete", total_chunks=4, chunks_processed=4, total_keywords=12)
 
         entries = fm.list_projects()
         assert entries[0].digest_state == "complete"
-        assert entries[0].digest_chunks_embedded == 4
+        assert entries[0].digest_chunks_processed == 4
+        assert entries[0].digest_total_keywords == 12
 
     def test_project_with_error_state(self, temp_workspace):
         fm = FileManager(temp_workspace["projects"])

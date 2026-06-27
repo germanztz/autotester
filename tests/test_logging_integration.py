@@ -25,9 +25,9 @@ def autotester_caplog(caplog):
 
 class TestFilesControllerLogging:
     def test_upload_logs_info(self, client, sample_pdf_bytes, autotester_caplog):
-        from test_ai_manager import FakeOllama
+        from tests.test_semantic_segmenter import FakeOllamaChat
 
-        client.application.extensions["ai_manager"].ollama = FakeOllama()
+        client.application.extensions["segmenter"].llm = FakeOllamaChat()
         client.post(
             "/files/upload",
             data={
@@ -41,9 +41,9 @@ class TestFilesControllerLogging:
         assert any("User uploaded PDF | Project: log_demo | File: doc.pdf" in m for m in messages)
 
     def test_rename_logs_info(self, client, sample_pdf_bytes, autotester_caplog):
-        from test_ai_manager import FakeOllama
+        from tests.test_semantic_segmenter import FakeOllamaChat
 
-        client.application.extensions["ai_manager"].ollama = FakeOllama()
+        client.application.extensions["segmenter"].llm = FakeOllamaChat()
         client.post(
             "/files/upload",
             data={
@@ -58,9 +58,9 @@ class TestFilesControllerLogging:
         assert any("Project renamed | renamed -> renamed2" in m for m in messages)
 
     def test_delete_logs_info(self, client, sample_pdf_bytes, autotester_caplog):
-        from test_ai_manager import FakeOllama
+        from tests.test_semantic_segmenter import FakeOllamaChat
 
-        client.application.extensions["ai_manager"].ollama = FakeOllama()
+        client.application.extensions["segmenter"].llm = FakeOllamaChat()
         client.post(
             "/files/upload",
             data={
@@ -88,26 +88,25 @@ class TestConfigControllerLogging:
 
 
 class TestDigestionLogging:
-    def test_per_page_digestion_logs(self, client, sample_pdf_bytes, autotester_caplog):
-        """Upload a PDF with a real markdown file so the supervisor digests a page."""
-        from test_ai_manager import FakeOllama
+    def test_chunk_digestion_logs(self, client, sample_pdf_bytes, autotester_caplog):
+        """Upload a PDF and let the supervisor process a chunk."""
+        from tests.test_semantic_segmenter import FakeOllamaChat
 
-        client.application.extensions["ai_manager"].ollama = FakeOllama()
+        client.application.extensions["segmenter"].llm = FakeOllamaChat()
         client.post(
             "/files/upload",
             data={
-                "project_name": "dpage",
+                "project_name": "dchunk",
                 "pdf": (io.BytesIO(sample_pdf_bytes), "doc.pdf"),
             },
             content_type="multipart/form-data",
             headers={"Accept": "application/json"},
         )
-        # Let the supervisor process a page.
+        # Let the supervisor process a chunk.
         supervisor = client.application.extensions["digest_supervisor"]
         supervisor.wait_until_idle(timeout=5.0)
         messages = [r.message for r in autotester_caplog.records]
-        assert any("Starting digestion" in m and "dpage" in m for m in messages)
-        assert any("Finished digestion" in m and "dpage" in m for m in messages)
+        assert any("Starting semantic segmentation" in m and "dchunk" in m for m in messages)
 
 
 class TestJobRunnerLogging:

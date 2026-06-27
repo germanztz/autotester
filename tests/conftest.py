@@ -53,7 +53,7 @@ def _quiet_logger():
     reset_logger()
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def _shutdown_job_runner(app):
     """Shut down the per-test JobRunner executor and DigestSupervisor.
 
@@ -94,7 +94,7 @@ def app(temp_workspace: dict) -> Iterator:
 
 
 @pytest.fixture
-def client(app):
+def client(app, _shutdown_job_runner):
     """Flask test client."""
     return app.test_client()
 

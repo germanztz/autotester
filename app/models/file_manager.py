@@ -24,9 +24,11 @@ from app.utils.validators import is_valid_pdf_bytes, safe_project_name
 
 _DEFAULT_DIGEST_STATE: dict[str, Any] = {
     "state": "queued",
-    "current_page": 0,
-    "total_pages": 0,
-    "chunks_embedded": 0,
+    "total_words": 0,
+    "last_index": 0,
+    "total_chunks": 0,
+    "chunks_processed": 0,
+    "total_keywords": 0,
     "error": None,
 }
 
@@ -56,9 +58,11 @@ class ProjectEntry:
     size_bytes: int
     created_at: float
     digest_state: str = "queued"
-    digest_current_page: int = 0
-    digest_total_pages: int = 0
-    digest_chunks_embedded: int = 0
+    digest_total_words: int = 0
+    digest_last_index: int = 0
+    digest_total_chunks: int = 0
+    digest_chunks_processed: int = 0
+    digest_total_keywords: int = 0
     digest_error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -68,9 +72,11 @@ class ProjectEntry:
             "size_bytes": self.size_bytes,
             "created_at": self.created_at,
             "digest_state": self.digest_state,
-            "digest_current_page": self.digest_current_page,
-            "digest_total_pages": self.digest_total_pages,
-            "digest_chunks_embedded": self.digest_chunks_embedded,
+            "digest_total_words": self.digest_total_words,
+            "digest_last_index": self.digest_last_index,
+            "digest_total_chunks": self.digest_total_chunks,
+            "digest_chunks_processed": self.digest_chunks_processed,
+            "digest_total_keywords": self.digest_total_keywords,
             "digest_error": self.digest_error,
         }
 
@@ -117,9 +123,11 @@ class FileManager:
                     size_bytes=size,
                     created_at=created,
                     digest_state=digest["state"],
-                    digest_current_page=digest["current_page"],
-                    digest_total_pages=digest["total_pages"],
-                    digest_chunks_embedded=digest["chunks_embedded"],
+                    digest_total_words=digest["total_words"],
+                    digest_last_index=digest["last_index"],
+                    digest_total_chunks=digest["total_chunks"],
+                    digest_chunks_processed=digest["chunks_processed"],
+                    digest_total_keywords=digest["total_keywords"],
                     digest_error=digest["error"],
                 )
             )

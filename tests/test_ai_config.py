@@ -13,16 +13,23 @@ class TestIaDefaults:
         assert "ia" in cfg
         ia = cfg["ia"]
         assert ia["ollama_url"] == "http://localhost:11434"
-        assert ia["embedding_model"] == "qwen3-embedding:4b"
-        assert ia["chunk_size"] == 500
+        assert ia["ollama_model"] == "qwen3.5:latest"
+        assert ia["chunk_size"] == 400
         assert ia["chunk_overlap"] == 50
+        assert "system_prompt" in ia
+        assert "user_prompt_tpl" in ia
+        assert isinstance(ia["system_prompt"], str) and ia["system_prompt"]
+        assert isinstance(ia["user_prompt_tpl"], str) and ia["user_prompt_tpl"]
+        assert "{text}" in ia["user_prompt_tpl"]
 
     def test_ia_defaults_constant_exports_expected_keys(self):
         assert set(IA_DEFAULTS.keys()) == {
             "ollama_url",
-            "embedding_model",
+            "ollama_model",
             "chunk_size",
             "chunk_overlap",
+            "system_prompt",
+            "user_prompt_tpl",
         }
 
 
@@ -34,7 +41,7 @@ class TestIaUpdates:
         assert ia["ollama_url"] == "http://example.com:11434"
         assert ia["chunk_size"] == 800
         # untouched fields keep their defaults
-        assert ia["embedding_model"] == "qwen3-embedding:4b"
+        assert ia["ollama_model"] == "qwen3.5:latest"
         assert ia["chunk_overlap"] == 50
 
     def test_partial_update_preserves_other_ia_keys(self, temp_workspace: dict):
@@ -64,11 +71,11 @@ class TestIaUpdates:
 
     def test_update_ia_persists_to_disk(self, temp_workspace: dict):
         mgr = ConfigManager(temp_workspace["config"])
-        mgr.update_ia(embedding_model="custom-model")
+        mgr.update_ia(ollama_model="custom-model")
         import yaml
 
         on_disk = yaml.safe_load(temp_workspace["config"].read_text())
-        assert on_disk["ia"]["embedding_model"] == "custom-model"
+        assert on_disk["ia"]["ollama_model"] == "custom-model"
 
     def test_get_ia_returns_defaults_when_missing(self, temp_workspace: dict):
         mgr = ConfigManager(temp_workspace["config"])

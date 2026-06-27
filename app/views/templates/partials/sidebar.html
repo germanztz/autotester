@@ -29,13 +29,21 @@
                         <div class="fw-semibold text-truncate">{{ project.name }}</div>
                         <div class="small text-muted project-status">
                             {% if project.digest_state == 'complete' %}
-                                {{ project.digest_total_pages }} pages
+                                {{ project.digest_total_keywords }} keywords
                             {% elif project.digest_state == 'failed' %}
-                                <span class="text-danger">{{ project.digest_current_page }}/{{ project.digest_total_pages }} failed</span>
+                                <span class="text-danger">failed</span>
                             {% elif project.digest_state == 'error' %}
                                 <span class="text-danger">Error</span>
+                            {% elif project.digest_state == 'processing' or project.digest_state == 'queued' %}
+                                {% if project.digest_total_words > 0 %}
+                                    processing {{ (project.digest_last_index / project.digest_total_words * 100) | int }}%
+                                {% else %}
+                                    processing 0%
+                                {% endif %}
+                            {% elif project.digest_state == 'cancelled' %}
+                                <span class="text-warning">cancelled</span>
                             {% else %}
-                                {{ project.digest_current_page }}/{{ project.digest_total_pages }} {{ project.digest_state }}
+                                {{ project.digest_state }}
                             {% endif %}
                         </div>
                     </div>

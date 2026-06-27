@@ -42,15 +42,17 @@ class TestApiProjects:
             "pdf_count",
             "size_bytes",
             "digest_state",
-            "digest_current_page",
-            "digest_total_pages",
-            "digest_chunks_embedded",
+            "digest_total_words",
+            "digest_last_index",
+            "digest_total_chunks",
+            "digest_chunks_processed",
+            "digest_total_keywords",
             "digest_error",
         ):
             assert key in project, f"missing key: {key}"
 
         assert project["digest_state"] == "queued"
-        assert project["digest_chunks_embedded"] == 0
+        assert project["digest_total_chunks"] == 0
 
     def test_reflects_processing_state(self, client, sample_pdf_bytes):
         import json
@@ -64,9 +66,11 @@ class TestApiProjects:
             json.dumps(
                 {
                     "state": "processing",
-                    "current_page": 3,
-                    "total_pages": 8,
-                    "chunks_embedded": 3,
+                    "total_words": 1000,
+                    "last_index": 300,
+                    "total_chunks": 5,
+                    "chunks_processed": 2,
+                    "total_keywords": 8,
                     "error": None,
                     "updated_at": 0.0,
                 }
@@ -78,5 +82,5 @@ class TestApiProjects:
         data = resp.get_json()
         proj = next(p for p in data["projects"] if p["name"] == "digestme")
         assert proj["digest_state"] == "processing"
-        assert proj["digest_current_page"] == 3
-        assert proj["digest_total_pages"] == 8
+        assert proj["digest_total_words"] == 1000
+        assert proj["digest_last_index"] == 300

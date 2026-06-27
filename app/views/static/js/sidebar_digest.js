@@ -17,21 +17,27 @@
     };
 
     function statusText(p) {
-        const cp = p.digest_current_page || 0;
-        const tp = p.digest_total_pages || 0;
+        const tw = p.digest_total_words || 0;
+        const li = p.digest_last_index || 0;
+        const kw = p.digest_total_keywords || 0;
         switch (p.digest_state) {
             case "complete":
-                return `${tp} pages`;
+                return `${kw} keywords`;
             case "failed":
-                return `${cp}/${tp} failed`;
+                return `failed`;
             case "error":
                 return "Error";
+            case "cancelled":
+                return "cancelled";
             case "processing":
             case "queued":
-            case "cancelled":
-                return `${cp}/${tp} ${p.digest_state}`;
+                if (tw > 0) {
+                    const pct = Math.min(100, Math.round((li / tw) * 100));
+                    return `processing ${pct}%`;
+                }
+                return "processing 0%";
             default:
-                return `${cp}/${tp} queued`;
+                return `${p.digest_state}`;
         }
     }
 
@@ -87,7 +93,7 @@
         const icon = STATE_ICONS[p.digest_state] || STATE_ICONS.queued;
         const status = escapeHtml(statusText(p));
         const errorClass = (p.digest_state === "error" || p.digest_state === "failed") ? "text-danger" : "";
-        const showStop = ["processing", "queued", "error"].includes(p.digest_state);
+        const showStop = ["processing", "queued"].includes(p.digest_state);
         const stopForm = showStop
             ? `<form method="POST" action="/files/${encodeURIComponent(p.name)}/cancel" class="d-inline" data-action="cancel">
                     <button type="submit" class="btn btn-sm btn-link p-1 text-warning" title="Stop digest">

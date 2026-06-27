@@ -21,9 +21,9 @@ def _parse_int(value: str | None) -> int | None:
 @config_bp.route("/", methods=["GET"])
 def show():
     """Render the configuration page."""
-    ai_manager = current_app.extensions["ai_manager"]
+    segmenter = current_app.extensions["segmenter"]
     config_manager = current_app.extensions["config_manager"]
-    ollama_ok, ollama_msg = ai_manager.validate_ollama()
+    ollama_ok, ollama_msg = segmenter.validate_ollama()
     return render_template(
         "config.html",
         ollama_ok=ollama_ok,
@@ -41,7 +41,7 @@ def update():
     reachability probe is performed after the IA section is saved.
     """
     config_manager = current_app.extensions["config_manager"]
-    ai_manager = current_app.extensions["ai_manager"]
+    segmenter = current_app.extensions["segmenter"]
     errors: list[str] = []
     ia_updated = False
     log_level_updated = False
@@ -60,15 +60,23 @@ def update():
     ollama_url = request.form.get("ollama_url", "").strip()
     if ollama_url:
         ia_payload["ollama_url"] = ollama_url
-    embedding_model = request.form.get("embedding_model", "").strip()
-    if embedding_model:
-        ia_payload["embedding_model"] = embedding_model
+    ollama_model = request.form.get("ollama_model", "").strip()
+    if ollama_model:
+        ia_payload["ollama_model"] = ollama_model
     chunk_size = _parse_int(request.form.get("chunk_size"))
     if chunk_size is not None:
         ia_payload["chunk_size"] = chunk_size
     chunk_overlap = _parse_int(request.form.get("chunk_overlap"))
     if chunk_overlap is not None:
         ia_payload["chunk_overlap"] = chunk_overlap
+
+    # Prompts
+    system_prompt = request.form.get("system_prompt")
+    if system_prompt is not None:
+        ia_payload["system_prompt"] = system_prompt
+    user_prompt_tpl = request.form.get("user_prompt_tpl")
+    if user_prompt_tpl is not None:
+        ia_payload["user_prompt_tpl"] = user_prompt_tpl
 
     if ia_payload:
         try:
@@ -92,16 +100,18 @@ def update():
     # Flush any validation errors.
     if errors:
         flash(errors[0], "danger")
+        logger.info("Configuration saved by user (with errors)")
+        return redirect(url_for("config.show"))
+
     logger.info("Configuration saved by user")
-    return redirect(url_for("config.show"))
 
     # Success feedback.
     if ia_updated:
-        ok, msg = ai_manager.validate_ollama()
+        ok, msg = segmenter.validate_ollama()
         if ok:
             logger.info(
                 "Ollama reachable: %s",
-                ai_manager.get_ia_settings()["ollama_url"],
+                segmenter._get_ia_settings()["ollama_url"],
             )
             flash(f"Settings saved. {msg}", "success")
         else:
