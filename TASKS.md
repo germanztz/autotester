@@ -80,6 +80,15 @@
     3. Al hacer clic en el botón, se deben validar y guardar todos los campos del formulario en el `config.yaml`.
     4. Mostrar feedback visual (ej. toast de éxito o error) tras intentar guardar.
   - **Prioridad:**  🟡 Media
+
+✅ **#008 - Eliminar notificación flotante durante la digestión de PDF**
+  - **Descripción:** Eliminar el toast o notificación flotante que aparece actualmente durante el proceso de digestión del PDF. Dado que el progreso ya se muestra de forma nativa en el panel izquierdo (sidebar) según la issue #002, esta notificación flotante es redundante y ensucia la interfaz.
+  - **Criterios de Aceptación:**
+    1. Identificar y eliminar el componente de notificación flotante (toast/alert) asociado al estado de digestión.
+    2. Verificar que el progreso de la digestión se sigue mostrando correctamente en el sidebar.
+    3. Limpiar cualquier código JavaScript o CSS huérfano que se usara exclusivamente para gestionar esta notificación flotante.
+  - **Prioridad:** 🟡 Media
+
   
   
   ## 📋 Backlog

@@ -66,7 +66,6 @@ def upload():
     if wants_json:
         return jsonify({"project": entry.name, "status": "queued"}), 202
 
-    flash(f"Uploaded '{entry.name}'. Indexing...", "info")
     return redirect(url_for("main.index"))
 
 
@@ -136,5 +135,4 @@ def cancel_digest(project_name: str):
     if "application/json" in (request.headers.get("Accept") or ""):
         return jsonify({"ok": True, "project": project_name})
 
-    flash(f"Stopping digest for '{project_name}'...", "info")
     return redirect(url_for("main.index"))
