@@ -183,7 +183,7 @@ class OllamaChatClient:
                 "messages": messages,
                 "stream": False,
                 "format": "json",
-                "options": {"think": False},
+                "think": False,
             },
         )
         elapsed = response.elapsed.total_seconds() if hasattr(response, "elapsed") else 0
@@ -196,5 +196,9 @@ class OllamaChatClient:
         )
         data = response.json()
         if "message" not in data or "content" not in data["message"]:
+            logger.debug("Ollama /api/chat response body: %s", data)
             raise OllamaUnavailable("Ollama /api/chat response missing 'message.content'")
-        return data["message"]["content"]
+        content = data["message"]["content"]
+        if not content:
+            logger.debug("Ollama /api/chat empty content, response body: %s", data)
+        return content

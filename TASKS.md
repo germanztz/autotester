@@ -143,12 +143,7 @@
        - Renombrar proyecto: `INFO | Project renamed | <old_name> -> <new_name>`
        - Eliminar proyecto: `INFO | Project deleted | <project_name>`
 
-  ## 📋 Backlog
-Como analista de software, he redactado la especificación de la *Feature* (Característica) siguiendo las mejores prácticas de gestión de productos y requisitos técnicos. Está estructurada para ser introducida directamente en un gestor de tareas (como Jira, GitHub Issues o Trello).
-
----
-
-**#011 - Refactorización del Motor de Ingesta - Reemplazo de RAG por Segmentación Semántica con LLM Local**
+✅ **#011 - Refactorización del Motor de Ingesta - Reemplazo de RAG por Segmentación Semántica con LLM Local**
 
   - **1. Descripción y Justificación**
   Actualmente, el sistema utiliza una implementación basada en RAG (con ChromaDB) para la ingestión de PDFs. Aunque útil para búsquedas semánticas, este enfoque es un anti-patrón para el flujo secuencial y gamificado de *Autotester*, ya que no garantiza el tamaño de párrafo requerido (100-150 palabras) ni extrae metadatos útiles (keywords) de forma nativa.
@@ -202,4 +197,11 @@ Como analista de software, he redactado la especificación de la *Feature* (Cara
   *   [ ] Al terminar, el sidebar muestra el tic verde ✅ y el recuento total de `"x keywords"`.
   *   [ ] Se han escrito tests unitarios (usando `pytest` y mocks para Ollama) que validan la lógica de chunking, el cálculo del progreso y la estructura del JSON de salida.
   *   [ ] eliminacion del codigo anterior, test unitarios de la implementacion RAG
+
+
+
+  ## 📋 Backlog
+Como analista de software, he redactado la especificación de la *Feature* (Característica) siguiendo las mejores prácticas de gestión de productos y requisitos técnicos. Está estructurada para ser introducida directamente en un gestor de tareas (como Jira, GitHub Issues o Trello).
+
+---
 
