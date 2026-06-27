@@ -3,10 +3,11 @@
 {% block content %}
 <h1 class="h3 mb-3"><i class="bi bi-gear"></i> Configuration</h1>
 
+<form method="POST" action="{{ url_for('config.update') }}" id="config-form">
+
 <div class="card shadow-sm mb-3">
     <div class="card-body">
         <h5 class="card-title"><i class="bi bi-palette"></i> Theme</h5>
-        <form method="POST" action="{{ url_for('config.update') }}">
             <div class="mb-3">
                 <div class="d-flex gap-3 flex-wrap">
                     {% for value, label, icon in [
@@ -25,10 +26,6 @@
                 </div>
                 <div class="form-text">"System" follows your operating system preference.</div>
             </div>
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-check-lg"></i> Save theme
-            </button>
-        </form>
     </div>
 </div>
 
@@ -44,7 +41,6 @@
             <span>{{ ollama_msg }}</span>
         </div>
 
-        <form method="POST" action="{{ url_for('config.update') }}">
             <div class="mb-3">
                 <label class="form-label" for="ollama_url">Ollama URL</label>
                 <input type="url" class="form-control" id="ollama_url" name="ollama_url"
@@ -69,14 +65,10 @@
                            value="{{ app_config.ia.chunk_overlap }}" required>
                 </div>
             </div>
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-check-lg"></i> Save AI settings
-            </button>
-        </form>
     </div>
 </div>
 
-<div class="card shadow-sm">
+<div class="card shadow-sm mb-3">
     <div class="card-body">
         <h5 class="card-title"><i class="bi bi-terminal"></i> Logging</h5>
         <p class="text-muted small">
@@ -85,7 +77,6 @@
             <code>DEBUG</code> to see HTTP requests, chunk counts and retry
             attempts.
         </p>
-        <form method="POST" action="{{ url_for('config.update') }}">
             <div class="mb-3">
                 <label class="form-label" for="log_level">Log level</label>
                 <select class="form-select" id="log_level" name="log_level">
@@ -97,10 +88,17 @@
                     Override at launch with <code>AUTOTESTER_LOG_LEVEL=DEBUG python run.py</code>.
                 </div>
             </div>
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-check-lg"></i> Save logging settings
-            </button>
-        </form>
     </div>
 </div>
+
+<div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+        <i class="bi bi-check-lg"></i> Save Settings
+    </button>
+    <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">
+        Cancel
+    </a>
+</div>
+
+</form>
 {% endblock %}

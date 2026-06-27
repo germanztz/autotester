@@ -71,7 +71,18 @@
   - **Descripción:** la url de ollama se ha cambiado a http://localhost:31434 en la pagina de fonciguracion, pero la conexions falla.
   se tuede ver un error : ERROR    autotester | Job 9e8f1138eb814116aaacdec11edf9e9c failed: OllamaUnavailable: Ollama unreachable at http://localhost:11434 (after 3 attempts)
 
-## 📋 Backlog
+
+✅ **#007 - Unificar botones de guardado en la vista de configuración**
+  - **Descripción:** Refactorizar la vista de configuración para eliminar los múltiples botones de "Guardar" actuales. Implementar un único botón de guardado que persista todos los cambios de la configuración (tema, ajustes de IA, chunking, etc.) en el `config.yaml` de una sola vez.
+  - **Criterios de Aceptación:**
+    1. Eliminar todos los botones de guardado individuales existentes en la página de configuración.
+    2. Añadir un único botón "Save Settings" al final del formulario de configuración.
+    3. Al hacer clic en el botón, se deben validar y guardar todos los campos del formulario en el `config.yaml`.
+    4. Mostrar feedback visual (ej. toast de éxito o error) tras intentar guardar.
+  - **Prioridad:**  🟡 Media
+  
+  
+  ## 📋 Backlog
 
 
 **006 - Sistema de cola de digestión con polling y procesamiento secuencial**
@@ -89,23 +100,6 @@
        - icono in progress,  en el div project-status :"{x}/{y} {status}" si no está completada la digestion
        - icono tic verde, en el div project-status : "{y} pages" si está completada la digestion.
     8. **Manejo de errores:** Si un proyecto falla durante la digestión, debe marcarse como error y no bloquear el procesamiento de los demás proyectos en la cola.
-  - **Prioridad:** 🟡 Media
-
-**#007 - Unificar botones de guardado en la vista de configuración**
-  - **Descripción:** Refactorizar la vista de configuración para eliminar los múltiples botones de "Guardar" actuales. Implementar un único botón de guardado que persista todos los cambios de la configuración (tema, ajustes de IA, chunking, etc.) en el `config.yaml` de una sola vez.
-  - **Criterios de Aceptación:**
-    1. Eliminar todos los botones de guardado individuales existentes en la página de configuración.
-    2. Añadir un único botón "Save Settings" al final del formulario de configuración.
-    3. Al hacer clic en el botón, se deben validar y guardar todos los campos del formulario en el `config.yaml`.
-    4. Mostrar feedback visual (ej. toast de éxito o error) tras intentar guardar.
-  - **Prioridad:**  🟡 Media
-
-**#008 - Eliminar notificación flotante durante la digestión de PDF**
-  - **Descripción:** Eliminar el toast o notificación flotante que aparece actualmente durante el proceso de digestión del PDF. Dado que el progreso ya se muestra de forma nativa en el panel izquierdo (sidebar) según la issue #002, esta notificación flotante es redundante y ensucia la interfaz.
-  - **Criterios de Aceptación:**
-    1. Identificar y eliminar el componente de notificación flotante (toast/alert) asociado al estado de digestión.
-    2. Verificar que el progreso de la digestión se sigue mostrando correctamente en el sidebar.
-    3. Limpiar cualquier código JavaScript o CSS huérfano que se usara exclusivamente para gestionar esta notificación flotante.
   - **Prioridad:** 🟡 Media
 
 **#009 - Limpiar panel central y mostrar título del proyecto seleccionado**

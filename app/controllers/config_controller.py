@@ -34,15 +34,19 @@ def show():
 
 @config_bp.route("/", methods=["POST"])
 def update():
-    """Persist submitted configuration values (theme + IA settings).
+    """Persist all submitted configuration values (theme + IA + logging).
 
-    When the IA form is filled, the new values are validated and the
-    Ollama URL is probed: an unreachable Ollama is *advisory* — the
-    config still saves, but a warning flash is shown.
+    All sections are saved in a single pass. Validation errors for one
+    section do not prevent valid sections from being saved. An Ollama
+    reachability probe is performed after the IA section is saved.
     """
     config_manager = current_app.extensions["config_manager"]
     ai_manager = current_app.extensions["ai_manager"]
+    errors: list[str] = []
+    ia_updated = False
+    log_level_updated = False
 
+    # Theme
     theme = request.form.get("theme")
     if theme:
         try:
@@ -50,8 +54,7 @@ def update():
             logger.info("Theme updated: %s", theme)
         except ValueError as exc:
             logger.warning("Theme update failed: %s", exc)
-            flash(str(exc), "danger")
-            return redirect(url_for("config.show"))
+            errors.append(str(exc))
 
     # IA section
     ia_payload: dict = {}
@@ -71,36 +74,44 @@ def update():
     if ia_payload:
         try:
             config_manager.update_ia(**ia_payload)
+            ia_updated = True
+            logger.info("IA settings updated: %s", sorted(ia_payload.keys()))
         except ValueError as exc:
             logger.warning("IA update failed: %s", exc)
-            flash(str(exc), "danger")
-            return redirect(url_for("config.show"))
+            errors.append(str(exc))
 
-        logger.info("IA settings updated: %s", sorted(ia_payload.keys()))
-
-        # Advisory check
-        ok, msg = ai_manager.validate_ollama()
-        if ok:
-            logger.info("Ollama reachable: %s", ai_manager.get_ia_settings()["ollama_url"])
-            flash(f"IA settings saved. {msg}", "success")
-        else:
-            logger.warning("Ollama unreachable: %s", msg)
-            flash(f"IA settings saved, but: {msg}", "warning")
-        return redirect(url_for("config.show"))
-
-    # Logging section (independent of IA section).
+    # Logging section
     log_level = request.form.get("log_level", "").strip()
     if log_level:
         try:
             config_manager.update_logging(level=log_level)
+            log_level_updated = True
+            setup_logging(log_level)
+            logger.info("Log level changed to %s", log_level)
         except ValueError as exc:
             logger.warning("Logging update failed: %s", exc)
-            flash(str(exc), "danger")
-            return redirect(url_for("config.show"))
-        setup_logging(log_level)
-        logger.info("Log level changed to %s", log_level)
-        flash(f"Log level set to {log_level}.", "success")
+            errors.append(str(exc))
+
+    # Flush any validation errors.
+    if errors:
+        flash(errors[0], "danger")
         return redirect(url_for("config.show"))
 
-    flash("Configuration saved.", "success")
+    # Success feedback.
+    if ia_updated:
+        ok, msg = ai_manager.validate_ollama()
+        if ok:
+            logger.info(
+                "Ollama reachable: %s",
+                ai_manager.get_ia_settings()["ollama_url"],
+            )
+            flash(f"Settings saved. {msg}", "success")
+        else:
+            logger.warning("Ollama unreachable: %s", msg)
+            flash(f"Settings saved, but: {msg}", "warning")
+    elif log_level_updated:
+        flash(f"Settings saved. Log level set to {log_level}.", "success")
+    else:
+        flash("Settings saved.", "success")
+
     return redirect(url_for("config.show"))
