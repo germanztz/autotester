@@ -5,6 +5,7 @@
     const POLL_INTERVAL_ERROR_MS = 4000;
 
     let pollTimer = null;
+    let selectedProject = null;
 
     const STATE_ICONS = {
         queued: "bi-file-earmark-pdf text-danger",
@@ -41,6 +42,44 @@
             '"': "&quot;",
             "'": "&#39;",
         }[c]));
+    }
+
+    function selectProject(name) {
+        if (selectedProject === name) {
+            // Toggle off when clicking the same project.
+            selectedProject = null;
+            document.querySelectorAll(".project-item").forEach(function (el) {
+                el.classList.remove("active");
+            });
+            document.getElementById("panel-title").innerHTML =
+                '<i class="bi bi-robot"></i> autotester';
+            document.getElementById("panel-content").innerHTML =
+                '<div class="card shadow-sm mt-3">' +
+                '<div class="card-body text-center text-muted py-5">' +
+                '<i class="bi bi-folder2-open d-block fs-1 mb-3"></i>' +
+                '<p class="mb-0">Select a project from the sidebar to view details.</p>' +
+                "</div></div>";
+            return;
+        }
+        selectedProject = name;
+        document.querySelectorAll(".project-item").forEach(function (el) {
+            el.classList.toggle("active", el.dataset.projectName === name);
+        });
+        document.getElementById("panel-title").innerHTML =
+            '<i class="bi bi-file-earmark-text"></i> ' + escapeHtml(name);
+        document.getElementById("panel-content").innerHTML =
+            '<div class="card shadow-sm mt-3">' +
+            '<div class="card-body">' +
+            '<p class="text-muted mb-0">Project <strong>' + escapeHtml(name) +
+            "</strong> selected.</p></div></div>";
+    }
+
+    function restoreSelection() {
+        if (!selectedProject) return;
+        const el = document.querySelector(
+            '#project-list [data-project-name="' + CSS.escape(selectedProject) + '"]'
+        );
+        if (el) el.classList.add("active");
     }
 
     function renderRow(p) {
@@ -88,6 +127,7 @@
         const list = document.getElementById("project-list");
         if (!list) return;
         list.innerHTML = projects.map(renderRow).join("");
+        restoreSelection();
     }
 
     async function tick() {
@@ -114,20 +154,29 @@
         tick();
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("DOMContentLoaded", function () {
+        // Project selection via event delegation on the sidebar list.
+        document.body.addEventListener("click", function (e) {
+            var item = e.target.closest(".project-item");
+            if (!item) return;
+            // Ignore clicks on action buttons inside the item.
+            if (e.target.closest(".project-actions")) return;
+            selectProject(item.dataset.projectName);
+        });
+
         // Bind cancel forms (when present) to a no-op AJAX handler that
         // hides the row optimistically. Browser still POSTs if JS is off.
-        document.body.addEventListener("submit", (e) => {
-            const form = e.target;
+        document.body.addEventListener("submit", function (e) {
+            var form = e.target;
             if (form.matches && form.matches('form[data-action="cancel"]')) {
                 e.preventDefault();
                 fetch(form.action, {
                     method: "POST",
                     headers: { Accept: "application/json" },
                 })
-                    .then((r) => r.json())
-                    .then(() => tick())
-                    .catch(() => tick());
+                    .then(function (r) { return r.json(); })
+                    .then(function () { tick(); })
+                    .catch(function () { tick(); });
             }
         });
 

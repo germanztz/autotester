@@ -35,6 +35,12 @@ body {
 
 .project-list .project-item {
     transition: background-color 0.15s ease-in-out;
+    cursor: pointer;
+}
+
+.project-list .project-item.active {
+    background-color: var(--bs-primary-bg-subtle);
+    border-left: 3px solid var(--bs-primary);
 }
 
 .project-list .project-item:hover {

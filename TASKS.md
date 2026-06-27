@@ -89,7 +89,16 @@
     3. Limpiar cualquier código JavaScript o CSS huérfano que se usara exclusivamente para gestionar esta notificación flotante.
   - **Prioridad:** 🟡 Media
 
-  
+✅ **#009 - Limpiar panel central y mostrar título del proyecto seleccionado**
+  - **Descripción:** Refactorizar la vista por defecto del panel central para eliminar el "clutter" inicial. El panel central debe dejar de mostrar información estática y su título debe reflejar dinámicamente el proyecto que el usuario tiene seleccionado en el sidebar.
+  - **Criterios de Aceptación:**
+    1. Eliminar el título estático "Dashboard" del panel central.
+    2. Eliminar el mensaje de bienvenida (welcome message).
+    3. Eliminar la indicación de texto "Port 6444" de la parte superior derecha de la pantalla.
+    4. Eliminar el botón "+ Add PDF" a la derecha del titulo del panel central.
+    5. El encabezado/título del panel central debe mostrar dinámicamente el nombre del proyecto seleccionado en el sidebar.
+    6. Si no hay ningún proyecto seleccionado, el panel central debe mostrar un estado vacío limpio (o el nombre de la aplicación) sin los elementos eliminados.
+  - **Prioridad:** 🟡 Media  
   
   ## 📋 Backlog
 
@@ -104,21 +113,12 @@
     5. **Estado final consistente:** El ciclo de comprobación debe continuar hasta que todos los proyectos cumplan:
        - El archivo `.md` no contiene ninguna marca `### Page $number` pendiente.
        - Todas las páginas están procesadas e insertadas en el `chroma.db`.
-    6. **Auto-parada del polling:** Una vez que todos los proyectos estén en estado final (sin marcas pendientes y con el `chroma.db` completo), el sistema debe detener las comprobaciones periódicas.
+    6. **Auto-parada del polling:** Una vez que todos los proyectos estén en estado final (sin marcas pendientes y con el `chroma.db` completo), el sistema cambiará el periodo de las comprobaciones periódicas de 60 a 600 segundos.
     7. **Feedback en UI:** El panel izquierdo debe reflejar el estado real de cada proyecto (x = paginas procesadas, y= paginas totales del pdf, status=queued|error):
        - icono in progress,  en el div project-status :"{x}/{y} {status}" si no está completada la digestion
        - icono tic verde, en el div project-status : "{y} pages" si está completada la digestion.
+       - icono tic warning, en el div project-status : "Error", Si un proyecto falla durante la digestión
     8. **Manejo de errores:** Si un proyecto falla durante la digestión, debe marcarse como error y no bloquear el procesamiento de los demás proyectos en la cola.
   - **Prioridad:** 🟡 Media
 
-**#009 - Limpiar panel central y mostrar título del proyecto seleccionado**
-  - **Descripción:** Refactorizar la vista por defecto del panel central para eliminar el "clutter" inicial. El panel central debe dejar de mostrar información estática y su título debe reflejar dinámicamente el proyecto que el usuario tiene seleccionado en el sidebar.
-  - **Criterios de Aceptación:**
-    1. Eliminar el título estático "Dashboard" del panel central.
-    2. Eliminar el mensaje de bienvenida (welcome message).
-    3. Eliminar la indicación de texto "Port 6444" de la parte superior derecha de la pantalla.
-    4. Eliminar el botón "+ Add PDF" a la derecha del titulo del panel central.
-    5. El encabezado/título del panel central debe mostrar dinámicamente el nombre del proyecto seleccionado en el sidebar.
-    6. Si no hay ningún proyecto seleccionado, el panel central debe mostrar un estado vacío limpio (o el nombre de la aplicación) sin los elementos eliminados.
-  - **Prioridad:** 🟡 Media
 

@@ -1,23 +1,13 @@
 {% extends "base.html" %}
-{% block title %}autotester · Dashboard{% endblock %}
+{% block title %}autotester{% endblock %}
 {% block content %}
-<div class="d-flex align-items-center justify-content-between mb-3">
-    <h1 class="h3 mb-0"><i class="bi bi-speedometer2"></i> Dashboard</h1>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
-        <i class="bi bi-plus-lg"></i> Add PDF
-    </button>
-</div>
-
-<div class="card shadow-sm">
-    <div class="card-body">
-        <h5 class="card-title">Welcome to autotester</h5>
-        <p class="card-text text-muted mb-0">
-            Use the <strong>File &raquo; Open</strong> menu or the button above to add a PDF.
-            Each PDF lives inside its own project folder under <code>projects/</code> and is
-            indexed locally using Ollama embeddings stored in ChromaDB.
-            <strong>Digestion is lazy:</strong> pages are embedded one at a time and
-            you can monitor progress (and stop) from the sidebar.
-        </p>
+<h1 class="h3 mb-0" id="panel-title"><i class="bi bi-robot"></i> autotester</h1>
+<div id="panel-content">
+    <div class="card shadow-sm mt-3">
+        <div class="card-body text-center text-muted py-5">
+            <i class="bi bi-folder2-open d-block fs-1 mb-3"></i>
+            <p class="mb-0">Select a project from the sidebar to view details.</p>
+        </div>
     </div>
 </div>
 {% endblock %}
