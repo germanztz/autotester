@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 import pytest
 
@@ -47,11 +48,12 @@ class TestSetupLogging:
         logger = get_logger()
         assert logger.level == logging.INFO
 
-    def test_attaches_stderr_handler(self):
+    def test_attaches_stdout_handler(self):
         logger = setup_logging("INFO")
         assert len(logger.handlers) == 1
         handler = logger.handlers[0]
         assert isinstance(handler, logging.StreamHandler)
+        assert handler.stream is sys.stdout
 
     def test_handler_has_formatter(self):
         logger = setup_logging("INFO")

@@ -299,11 +299,11 @@ class TestProcessOnePage:
     ):
         proj, pdf = project_with_real_pdf
         lazy_ai.ensure_markdown(proj, pdf)
-        # Process all 4 pages
-        for _ in range(4):
+        # Process first 3 pages — each returns info (not None)
+        for _ in range(3):
             info = lazy_ai.process_one_page(proj)
             assert info is not None
-        # Now complete
+        # 4th page is the last; now returns None (complete)
         info = lazy_ai.process_one_page(proj)
         assert info is None
 
@@ -409,6 +409,9 @@ class TestChromaPersistsAcrossCalls:
 
         project_dir = temp_workspace["projects"] / proj
         chroma_dir = project_dir / "chroma.db"
-        client = chromadb.PersistentClient(path=str(chroma_dir))
+        client = chromadb.PersistentClient(
+            path=str(chroma_dir),
+            settings=chromadb.config.Settings(anonymized_telemetry=False),
+        )
         col = client.get_or_create_collection(lazy_ai.ai_manager.COLLECTION_NAME)
         assert col.count() == 4

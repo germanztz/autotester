@@ -110,25 +110,47 @@ class JobRunner:
             with self._lock:
                 self._jobs[job_id]["state"] = "running"
                 self._jobs[job_id]["started_at"] = time.monotonic()
-            logger.debug("Job %s state -> running (%s)", job_id, fn_name)
+            logger.info("Job %s started: %s", job_id, fn_name)
             try:
                 result = fn(*args, **kwargs)
             except Exception as exc:  # noqa: BLE001 - we deliberately capture all
                 with self._lock:
-                    self._jobs[job_id]["state"] = "error"
                     self._jobs[job_id]["error"] = f"{type(exc).__name__}: {exc}"
-                    self._jobs[job_id]["finished_at"] = time.monotonic()
-                logger.error("Job %s failed: %s: %s", job_id, type(exc).__name__, exc)
+                elapsed = self._finish(job_id, "error")
+                logger.info(
+                    "Job %s completed | Status: ERROR | Total time: %.2fs",
+                    job_id, elapsed,
+                )
                 return
-            with self._lock:
-                self._jobs[job_id]["state"] = "done"
-                self._jobs[job_id]["result"] = result
-                self._jobs[job_id]["finished_at"] = time.monotonic()
-            logger.debug("Job %s state -> done", job_id)
+            elapsed = self._finish(job_id, "done")
+            if self.is_cancelled(job_id):
+                logger.info(
+                    "Job %s completed | Status: CANCELLED | Total time: %.2fs",
+                    job_id, elapsed,
+                )
+            else:
+                with self._lock:
+                    self._jobs[job_id]["result"] = result
+                logger.info(
+                    "Job %s completed | Status: SUCCESS | Total time: %.2fs",
+                    job_id, elapsed,
+                )
 
         future: Future = self._executor.submit(_runner)
         future.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
         return job_id
+
+
+    def _finish(self, job_id: str, state: str) -> float:
+        """Record final state and ``finished_at``; return elapsed seconds."""
+        now = time.monotonic()
+        with self._lock:
+            job = self._jobs[job_id]
+            job["state"] = state
+            job["finished_at"] = now
+            started = job.get("started_at") or now
+            elapsed = max(0.0, now - started)
+        return elapsed
 
     def get(self, job_id: str) -> dict[str, Any]:
         """Return a JSON-serializable status snapshot for the job.

@@ -8,7 +8,7 @@
     let selectedProject = null;
 
     const STATE_ICONS = {
-        queued: "bi-file-earmark-pdf text-danger",
+        queued: "bi-hourglass-split text-primary",
         processing: "bi-hourglass-split text-primary",
         complete: "bi-check2-circle text-success",
         cancelled: "bi-pause-circle text-warning",
@@ -24,10 +24,11 @@
                 return `${tp} pages`;
             case "failed":
                 return `${cp}/${tp} failed`;
+            case "error":
+                return "Error";
             case "processing":
             case "queued":
             case "cancelled":
-            case "error":
                 return `${cp}/${tp} ${p.digest_state}`;
             default:
                 return `${cp}/${tp} queued`;

@@ -51,7 +51,6 @@ def update():
     if theme:
         try:
             config_manager.update(theme=theme)
-            logger.info("Theme updated: %s", theme)
         except ValueError as exc:
             logger.warning("Theme update failed: %s", exc)
             errors.append(str(exc))
@@ -75,7 +74,6 @@ def update():
         try:
             config_manager.update_ia(**ia_payload)
             ia_updated = True
-            logger.info("IA settings updated: %s", sorted(ia_payload.keys()))
         except ValueError as exc:
             logger.warning("IA update failed: %s", exc)
             errors.append(str(exc))
@@ -87,7 +85,6 @@ def update():
             config_manager.update_logging(level=log_level)
             log_level_updated = True
             setup_logging(log_level)
-            logger.info("Log level changed to %s", log_level)
         except ValueError as exc:
             logger.warning("Logging update failed: %s", exc)
             errors.append(str(exc))
@@ -95,7 +92,8 @@ def update():
     # Flush any validation errors.
     if errors:
         flash(errors[0], "danger")
-        return redirect(url_for("config.show"))
+    logger.info("Configuration saved by user")
+    return redirect(url_for("config.show"))
 
     # Success feedback.
     if ia_updated:

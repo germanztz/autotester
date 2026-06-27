@@ -1,6 +1,6 @@
 """Centralized logging configuration for autotester.
 
-A single namespaced logger (``autotester``) writes to stderr at a level
+A single namespaced logger (``autotester``) writes to stdout at a level
 read from ``config.yaml`` (default ``INFO``). Setup is idempotent so it
 can be safely called from the app factory and from tests.
 """
@@ -21,7 +21,7 @@ VALID_LOG_LEVELS: Final[tuple[str, ...]] = (
 
 LOGGER_NAME: Final[str] = "autotester"
 
-_FORMAT: Final[str] = "%(asctime)s %(levelname)-8s %(name)s | %(message)s"
+_FORMAT: Final[str] = "%(asctime)s | %(levelname)s | %(message)s"
 
 _configured: bool = False
 
@@ -40,7 +40,7 @@ def _coerce_level(level: str) -> str:
 
 
 def setup_logging(level: str = "INFO") -> logging.Logger:
-    """Configure the autotester logger with a single stderr StreamHandler.
+    """Configure the autotester logger with a single stdout StreamHandler.
 
     Idempotent: re-calling clears previous handlers and reapplies the
     new level, which is useful for tests and runtime reconfiguration.
@@ -54,7 +54,7 @@ def setup_logging(level: str = "INFO") -> logging.Logger:
     for handler in list(logger.handlers):
         logger.removeHandler(handler)
 
-    handler = logging.StreamHandler(sys.stderr)
+    handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(logging.Formatter(_FORMAT))
     logger.addHandler(handler)
     # Intentionally allow propagation so libraries that attach to the

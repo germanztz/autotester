@@ -99,11 +99,8 @@
     5. El encabezado/título del panel central debe mostrar dinámicamente el nombre del proyecto seleccionado en el sidebar.
     6. Si no hay ningún proyecto seleccionado, el panel central debe mostrar un estado vacío limpio (o el nombre de la aplicación) sin los elementos eliminados.
   - **Prioridad:** 🟡 Media  
-  
-  ## 📋 Backlog
 
-
-**006 - Sistema de cola de digestión con polling y procesamiento secuencial**
+✅ **006 - Sistema de cola de digestión con polling y procesamiento secuencial**
   - **Descripción:** Implementar un mecanismo de fondo que, al iniciar la aplicación y posteriormente cada minuto, revise el estado de todos los proyectos para garantizar que todos los PDFs queden completamente digeridos. Solo se permite un trabajo de digestión activo a la vez en toda la aplicación (una página por vez).
   - **Criterios de Aceptación:**
     1. **Polling periódico:** Al arrancar la aplicación y, posteriormente, cada 60 segundos, comprobar el estado de todos los proyectos existentes.
@@ -119,6 +116,36 @@
        - icono tic verde, en el div project-status : "{y} pages" si está completada la digestion.
        - icono tic warning, en el div project-status : "Error", Si un proyecto falla durante la digestión
     8. **Manejo de errores:** Si un proyecto falla durante la digestión, debe marcarse como error y no bloquear el procesamiento de los demás proyectos en la cola.
+
+✅ **#010 - Logging de procesos en background y cambios de estado**
+  - **Descripción:** Implementar un sistema de logging en nivel `INFO` por consola para monitorizar procesos en segundo plano, cambios de estado del sistema y acciones relevantes del usuario. Los logs deben ser claros, estructurados y escritos en inglés (cumpliendo AGENTS.md).
+  - **Criterios de Aceptación:**
+    1. **Configuración del Logger:**
+       - Usar el módulo estándar `logging` de Python.
+       - Formateador estándar: `%(asctime)s | %(levelname)s | %(message)s`
+       - Nivel por defecto: `INFO`
+       - Salida exclusivamente por consola (`sys.stdout`).
+    2. **Arranque y Escaneo Inicial:**
+       - Al iniciar la aplicación, registrar: `INFO | Scanning ./projects/ for unprocessed pages...`
+       - Indicar cuántos proyectos requieren procesamiento tras el escaneo inicial.
+    3. **Proceso de Digestión (Página por Página):**
+       - Inicio: `INFO | Starting digestion | Document: <doc_name> | Page: <N>`
+       - Fin: `INFO | Finished digestion | Document: <doc_name> | Page: <N> | Duration: <X>ms`
+    4. **Escaneo Periódico (Polling):**
+       - Cada ciclo debe registrar si se encontraron páginas pendientes o no.
+       - Si todos los proyectos están al día y el intervalo cambia a `long_interval`, registrar: `INFO | All projects up to date. Switching scan interval to long_interval (<X>s)`
+    5. **Ciclo de Vida de Jobs:**
+       - Cualquier tarea en background debe loguear su inicio y fin con estado final (`SUCCESS`, `ERROR`, `CANCELLED`) y duración total.
+       - Ejemplo fin: `INFO | Digestion job completed | Status: SUCCESS | Total time: <Y>s`
+    6. **Acciones de Usuario (Cambios de Estado):**
+       - Upload PDF: `INFO | User uploaded PDF | Project: <project_name> | File: <filename.pdf>`
+       - Guardar configuración: `INFO | Configuration saved by user`
+       - Renombrar proyecto: `INFO | Project renamed | <old_name> -> <new_name>`
+       - Eliminar proyecto: `INFO | Project deleted | <project_name>`
+
+  ## 📋 Backlog
+
+
   - **Prioridad:** 🟡 Media
 
 

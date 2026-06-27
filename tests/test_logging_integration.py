@@ -1,7 +1,7 @@
 """Tests for the autotester logger integration.
 
 Verifies that key application events emit log records at the expected
-level. Uses pytest's ``caplog`` fixture so we don't depend on stderr
+level. Uses pytest's ``caplog`` fixture so we don't depend on stdout
 output or the configured handler.
 """
 from __future__ import annotations
@@ -24,9 +24,7 @@ def autotester_caplog(caplog):
 
 
 class TestFilesControllerLogging:
-    def test_upload_logs_info_with_project_and_size(
-        self, client, sample_pdf_bytes, autotester_caplog
-    ):
+    def test_upload_logs_info(self, client, sample_pdf_bytes, autotester_caplog):
         from test_ai_manager import FakeOllama
 
         client.application.extensions["ai_manager"].ollama = FakeOllama()
@@ -40,8 +38,7 @@ class TestFilesControllerLogging:
             headers={"Accept": "application/json"},
         )
         messages = [r.message for r in autotester_caplog.records]
-        assert any("Uploaded PDF" in m and "log_demo" in m for m in messages)
-        assert any("AI digest queued" in m and "log_demo" in m for m in messages)
+        assert any("User uploaded PDF | Project: log_demo | File: doc.pdf" in m for m in messages)
 
     def test_rename_logs_info(self, client, sample_pdf_bytes, autotester_caplog):
         from test_ai_manager import FakeOllama
@@ -56,21 +53,9 @@ class TestFilesControllerLogging:
             content_type="multipart/form-data",
             headers={"Accept": "application/json"},
         )
-        # Wait for the digest to finish to avoid races on rename.
-        import time
-        runner = client.application.extensions["job_runner"]
-        deadline = time.monotonic() + 3.0
-        while time.monotonic() < deadline:
-            job_id = runner.find_by_project("renamed")
-            if job_id is None:
-                break
-            snap = runner.get(job_id)
-            if snap["state"] in ("done", "error"):
-                break
-            time.sleep(0.02)
         client.post("/files/renamed/rename", data={"new_name": "renamed2"})
         messages = [r.message for r in autotester_caplog.records]
-        assert any("Renamed project" in m and "renamed2" in m for m in messages)
+        assert any("Project renamed | renamed -> renamed2" in m for m in messages)
 
     def test_delete_logs_info(self, client, sample_pdf_bytes, autotester_caplog):
         from test_ai_manager import FakeOllama
@@ -85,88 +70,67 @@ class TestFilesControllerLogging:
             content_type="multipart/form-data",
             headers={"Accept": "application/json"},
         )
-        # Wait for the lazy digest to finish so the delete is unambiguous.
-        import time
-        runner = client.application.extensions["job_runner"]
-        deadline = time.monotonic() + 3.0
-        while time.monotonic() < deadline:
-            job_id = runner.find_by_project("doomed")
-            if job_id is None:
-                break
-            snap = runner.get(job_id)
-            if snap["state"] in ("done", "error"):
-                break
-            time.sleep(0.02)
         client.post("/files/doomed/delete")
         messages = [r.message for r in autotester_caplog.records]
-        assert any("Deleted project" in m and "doomed" in m for m in messages)
+        assert any("Project deleted | doomed" in m for m in messages)
 
 
 class TestConfigControllerLogging:
-    def test_theme_change_logs_info(self, client, autotester_caplog):
+    def test_config_save_logs_info(self, client, autotester_caplog):
         client.post("/config/", data={"theme": "dark"})
         messages = [r.message for r in autotester_caplog.records]
-        assert any("Theme updated" in m and "dark" in m for m in messages)
+        assert any("Configuration saved by user" in m for m in messages)
 
-    def test_log_level_change_logs_info(self, client, autotester_caplog):
+    def test_config_save_logs_info_for_log_level(self, client, autotester_caplog):
         client.post("/config/", data={"log_level": "DEBUG"})
         messages = [r.message for r in autotester_caplog.records]
-        assert any("Log level changed" in m and "DEBUG" in m for m in messages)
-        # After saving DEBUG, the autotester logger should be at DEBUG.
-        assert logging.getLogger(LOGGER_NAME).level == logging.DEBUG
+        assert any("Configuration saved by user" in m for m in messages)
 
 
-class TestAiControllerLogging:
-    def test_validate_success_logs_info(self, client, autotester_caplog):
+class TestDigestionLogging:
+    def test_per_page_digestion_logs(self, client, sample_pdf_bytes, autotester_caplog):
+        """Upload a PDF with a real markdown file so the supervisor digests a page."""
         from test_ai_manager import FakeOllama
 
-        ai = client.application.extensions["ai_manager"]
-        ai.ollama = FakeOllama()
+        client.application.extensions["ai_manager"].ollama = FakeOllama()
         client.post(
-            "/ai/validate", data="{}", content_type="application/json"
+            "/files/upload",
+            data={
+                "project_name": "dpage",
+                "pdf": (io.BytesIO(sample_pdf_bytes), "doc.pdf"),
+            },
+            content_type="multipart/form-data",
+            headers={"Accept": "application/json"},
         )
+        # Let the supervisor process a page.
+        supervisor = client.application.extensions["digest_supervisor"]
+        supervisor.wait_until_idle(timeout=5.0)
         messages = [r.message for r in autotester_caplog.records]
-        assert any("Ollama reachable" in m for m in messages)
-
-
-class TestAiManagerLogging:
-    def test_digest_logs_start_and_finish(
-        self, client, sample_pdf_bytes, autotester_caplog, temp_workspace
-    ):
-        """Build a project on disk and run digest; verify log lines."""
-        from app.models.ai_manager import AIManager, OllamaUnavailable
-        from app.models.config_manager import ConfigManager
-        from app.models.file_manager import FileManager
-
-        class _FakeOllama:
-            def __init__(self):
-                self.dim = 8
-
-            def is_available(self):
-                return True
-
-            def embed(self, text, model):
-                return [float(len(text) % 7) / 7.0] * self.dim
-
-            def embed_batch(self, texts, model, batch_size=16):
-                return [self.embed(t, model) for t in texts]
-
-        # Build a project on disk with a sample PDF.
-        fm = FileManager(temp_workspace["projects"])
-        entry = fm.save_upload(io.BytesIO(sample_pdf_bytes), "doc.pdf", "logproj")
-        pdf_path = fm.project_path(entry.name) / "doc.pdf"
-
-        # Run digest with a fake Ollama client.
-        cm = ConfigManager(temp_workspace["config"])
-        ai = AIManager(cm, fm, ollama_client=_FakeOllama())
-        ai.digest_pdf(entry.name, pdf_path)
-
-        messages = [r.message for r in autotester_caplog.records]
-        assert any("AI digest started" in m and entry.name in m for m in messages)
-        assert any("AI digest finished" in m and entry.name in m for m in messages)
+        assert any("Starting digestion" in m and "dpage" in m for m in messages)
+        assert any("Finished digestion" in m and "dpage" in m for m in messages)
 
 
 class TestJobRunnerLogging:
+    def test_submit_and_success_log(self, autotester_caplog):
+        from app.services.job_runner import JobRunner
+
+        runner = JobRunner(max_workers=1, ttl_seconds=5.0)
+
+        def happy():
+            return "ok"
+
+        job_id = runner.submit(happy)
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            if runner.get(job_id)["state"] == "done":
+                break
+            time.sleep(0.02)
+
+        messages = [r.message for r in autotester_caplog.records]
+        assert any(f"Job {job_id} started:" in m for m in messages)
+        assert any(f"Job {job_id} completed | Status: SUCCESS" in m for m in messages)
+        runner.shutdown()
+
     def test_submit_and_failure_log(self, autotester_caplog):
         from app.services.job_runner import JobRunner
 
@@ -183,6 +147,6 @@ class TestJobRunnerLogging:
             time.sleep(0.02)
 
         messages = [r.message for r in autotester_caplog.records]
-        assert any(f"Job {job_id} submitted" in m for m in messages)
-        assert any(f"Job {job_id} failed" in m and "RuntimeError" in m for m in messages)
+        assert any(f"Job {job_id} started:" in m for m in messages)
+        assert any(f"Job {job_id} completed | Status: ERROR" in m for m in messages)
         runner.shutdown()

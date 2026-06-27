@@ -162,7 +162,10 @@ class TestDigestPdf:
         summary = ai.digest_pdf(entry.name, pdf_path)
         # Open the same persistent client and verify vectors exist.
         chroma_dir = ai.file_manager.project_path(entry.name) / "chroma.db"
-        client = chromadb.PersistentClient(path=str(chroma_dir))
+        client = chromadb.PersistentClient(
+            path=str(chroma_dir),
+            settings=chromadb.config.Settings(anonymized_telemetry=False),
+        )
         col = client.get_or_create_collection(ai.COLLECTION_NAME)
         assert col.count() == summary.chunks
 
@@ -220,7 +223,8 @@ class TestDigestPdf:
         ai.digest_pdf(entry.name, pdf_path)
         ai.digest_pdf(entry.name, pdf_path)
         client = chromadb.PersistentClient(
-            path=str(ai.file_manager.project_path(entry.name) / "chroma.db")
+            path=str(ai.file_manager.project_path(entry.name) / "chroma.db"),
+            settings=chromadb.config.Settings(anonymized_telemetry=False),
         )
         col = client.get_or_create_collection(ai.COLLECTION_NAME)
         # Second run adds the same IDs again; Chroma upserts, so count

@@ -23,7 +23,7 @@
                     {% elif project.digest_state == 'error' %}
                         <i class="bi bi-exclamation-triangle text-danger me-2"></i>
                     {% else %}
-                        <i class="bi bi-file-earmark-pdf text-danger me-2"></i>
+                        <i class="bi bi-hourglass-split text-primary me-2"></i>
                     {% endif %}
                     <div class="flex-grow-1 text-truncate" title="{{ project.name }}">
                         <div class="fw-semibold text-truncate">{{ project.name }}</div>
@@ -32,6 +32,8 @@
                                 {{ project.digest_total_pages }} pages
                             {% elif project.digest_state == 'failed' %}
                                 <span class="text-danger">{{ project.digest_current_page }}/{{ project.digest_total_pages }} failed</span>
+                            {% elif project.digest_state == 'error' %}
+                                <span class="text-danger">Error</span>
                             {% else %}
                                 {{ project.digest_current_page }}/{{ project.digest_total_pages }} {{ project.digest_state }}
                             {% endif %}

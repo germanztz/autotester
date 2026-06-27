@@ -49,10 +49,9 @@ def upload():
         return redirect(url_for("main.index"))
 
     logger.info(
-        "Uploaded PDF: project=%s file=%s size_bytes=%s",
+        "User uploaded PDF | Project: %s | File: %s",
         entry.name,
         file.filename,
-        entry.size_bytes,
     )
 
     # The new PDF is on disk. The digest supervisor (started by the app
@@ -87,7 +86,7 @@ def rename(project_name: str):
         flash(str(exc), "danger")
         return redirect(url_for("main.index"))
 
-    logger.info("Renamed project: %s -> %s", project_name, final)
+    logger.info("Project renamed | %s -> %s", project_name, final)
     flash(f"Renamed to '{final}'.", "success")
     return redirect(url_for("main.index"))
 
@@ -103,7 +102,7 @@ def delete(project_name: str):
         flash(str(exc), "danger")
         return redirect(url_for("main.index"))
 
-    logger.info("Deleted project: %s", project_name)
+    logger.info("Project deleted | %s", project_name)
     flash(f"Deleted '{project_name}'.", "success")
     return redirect(url_for("main.index"))
 

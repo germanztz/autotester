@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from app.services.page_digest import LazyAIManager, is_complete
+from app.services.page_digest import LazyAIManager, find_first_pending_page, is_complete
 from app.utils.logging_setup import get_logger
 
 logger = get_logger()
@@ -58,6 +58,7 @@ class DigestSupervisor:
     """Background thread that processes one PDF page at a time app-wide."""
 
     DEFAULT_INTERVAL_SECONDS = 60.0
+    DEFAULT_LONG_INTERVAL_SECONDS = 600.0
     DEFAULT_MAX_CONSECUTIVE_FAILURES = 5
     DEFAULT_PER_PAGE_SLEEP_SECONDS = 0.05
 
@@ -66,12 +67,14 @@ class DigestSupervisor:
         lazy_ai_manager: LazyAIManager,
         file_manager: Any,
         interval_seconds: float = DEFAULT_INTERVAL_SECONDS,
+        long_interval_seconds: float = DEFAULT_LONG_INTERVAL_SECONDS,
         max_consecutive_failures: int = DEFAULT_MAX_CONSECUTIVE_FAILURES,
         per_page_sleep_seconds: float = DEFAULT_PER_PAGE_SLEEP_SECONDS,
     ) -> None:
         self.lazy_ai_manager = lazy_ai_manager
         self.file_manager = file_manager
         self.interval_seconds = max(0.0, float(interval_seconds))
+        self.long_interval_seconds = max(0.0, float(long_interval_seconds))
         self.max_consecutive_failures = max(1, int(max_consecutive_failures))
         self.per_page_sleep_seconds = max(0.0, float(per_page_sleep_seconds))
 
@@ -102,8 +105,9 @@ class DigestSupervisor:
             )
             self._thread.start()
             logger.info(
-                "Digest supervisor started (interval=%.1fs, max_failures=%d)",
+                "Digest supervisor started (interval=%.1fs, long_interval=%.1fs, max_failures=%d)",
                 self.interval_seconds,
+                self.long_interval_seconds,
                 self.max_consecutive_failures,
             )
 
@@ -145,9 +149,13 @@ class DigestSupervisor:
                 if self._stop.is_set():
                     break
                 if result.all_complete:
-                    # Idle: wait up to interval_seconds, but wake early
-                    # if ensure_running() or stop() is called.
-                    self._wake.wait(timeout=self.interval_seconds)
+                    logger.info(
+                        "All projects up to date. Switching scan interval to long_interval (%.1fs)",
+                        self.long_interval_seconds,
+                    )
+                    # Idle: wait up to long_interval_seconds, but wake
+                    # early if ensure_running() or stop() is called.
+                    self._wake.wait(timeout=self.long_interval_seconds)
                 # Otherwise loop immediately to process the next page.
                 else:
                     if self.per_page_sleep_seconds > 0:
@@ -259,7 +267,22 @@ class DigestSupervisor:
             return {"ok": False, "error": reason, "terminal_failed": False}
 
         try:
+            proj_dir = self.file_manager.project_path(project_name)
+            md_path = proj_dir / f"{project_name}.md"
+            page = find_first_pending_page(md_path) if md_path.exists() else None
+            if page is not None:
+                logger.info(
+                    "Starting digestion | Document: %s | Page: %s",
+                    project_name, page,
+                )
+            page_t0 = time.monotonic()
             info = self.lazy_ai_manager.process_one_page(project_name)
+            page_elapsed = (time.monotonic() - page_t0) * 1000
+            if page is not None:
+                logger.info(
+                    "Finished digestion | Document: %s | Page: %s | Duration: %.0fms",
+                    project_name, page, page_elapsed,
+                )
         except Exception as exc:  # noqa: BLE001
             # process_one_page has already bumped consecutive_failures
             # and recorded the error. We only need to check whether the

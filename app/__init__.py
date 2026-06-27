@@ -4,6 +4,7 @@ Wires together configuration, blueprints, models and static assets.
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -49,6 +50,7 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
         or config_manager.load().get("logging", {}).get("level", "INFO")
     )
     setup_logging(log_level)
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
     app.extensions["logger"] = get_logger()
     get_logger().info(
         "autotester starting (log level: %s, projects: %s, config: %s)",
@@ -83,12 +85,20 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
         interval_seconds=float(
             app.config.get("DIGEST_POLL_INTERVAL_SECONDS", 60.0)
         ),
+        long_interval_seconds=float(
+            app.config.get("DIGEST_POLL_LONG_INTERVAL_SECONDS", 600.0)
+        ),
         max_consecutive_failures=int(
             app.config.get("MAX_CONSECUTIVE_FAILURES", 5)
         ),
     )
     app.extensions["digest_supervisor"] = digest_supervisor
     digest_supervisor.start()
+
+    # Log initial scan of projects directory.
+    get_logger().info("Scanning ./projects/ for unprocessed pages...")
+    pending = [e for e in file_manager.list_projects() if lazy_ai_manager.needs_digest(e.name)]
+    get_logger().info("Projects pending processing: %d", len(pending))
 
     @app.context_processor
     def inject_globals() -> dict:

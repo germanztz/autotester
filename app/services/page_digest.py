@@ -258,10 +258,9 @@ class LazyAIManager:
         Returns the markdown file path. Idempotent.
         """
         md_path = self._md_path(project_name)
+        is_first = not md_path.exists()
         n_pages = extract_to_markdown(pdf_path, md_path)
-        # Persist total_pages on first extraction; preserve existing state otherwise.
-        existing = self._load_state(project_name)
-        if existing.get("total_pages") != n_pages:
+        if is_first:
             self._persist_state(project_name, total_pages=n_pages)
         return md_path
 
@@ -381,6 +380,19 @@ class LazyAIManager:
         remove_marker(md_path, page)
 
         new_chunks = state.get("chunks_embedded", 0) + 1
+
+        if is_complete(md_path):
+            info = {"page": page, "chunks_embedded": new_chunks, "state": "complete"}
+            self._persist_state(
+                project_name,
+                state="complete",
+                chunks_embedded=new_chunks,
+                consecutive_failures=0,
+            )
+            if on_progress:
+                on_progress({"phase": "page_done", **info})
+            return None
+
         info = {"page": page, "chunks_embedded": new_chunks, "state": "processing"}
         self._persist_state(
             project_name,

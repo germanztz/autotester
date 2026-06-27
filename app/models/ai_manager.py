@@ -389,7 +389,10 @@ class AIManager:
         project_dir = self.file_manager.project_path(project_name)
         chroma_dir = project_dir / "chroma.db"
         chroma_dir.mkdir(parents=True, exist_ok=True)
-        client = chromadb.PersistentClient(path=str(chroma_dir))
+        client = chromadb.PersistentClient(
+            path=str(chroma_dir),
+            settings=chromadb.config.Settings(anonymized_telemetry=False),
+        )
         return client.get_or_create_collection(self.COLLECTION_NAME)
 
     def digest_pdf(
