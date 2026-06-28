@@ -138,14 +138,17 @@
     </div>
 </div>
 
+</form>
+
 <div class="d-flex gap-2">
-    <button type="submit" class="btn btn-primary">
+    <button type="submit" class="btn btn-primary" form="config-form">
         <i class="bi bi-check-lg"></i> Save Settings
     </button>
-    <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">
-        Cancel
-    </a>
+    <form method="POST" action="{{ url_for('config.reset') }}" class="d-inline"
+          onsubmit="return confirm('Reset all settings to their default values? This cannot be undone.')">
+        <button type="submit" class="btn btn-outline-danger">
+            <i class="bi bi-arrow-counterclockwise"></i> Reset to Defaults
+        </button>
+    </form>
 </div>
-
-</form>
 {% endblock %}

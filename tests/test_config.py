@@ -114,3 +114,44 @@ class TestLoggingSection:
         mgr = ConfigManager(temp_workspace["config"])
         mgr.update_logging(level=level)
         assert mgr.load()["logging"]["level"] == level
+
+
+class TestConfigManagerReset:
+    def test_reset_restores_defaults(self, temp_workspace: dict):
+        mgr = ConfigManager(temp_workspace["config"])
+        mgr.update(theme="dark")
+        mgr.update_ia(chunk_size=999, chunk_overlap=100)
+        mgr.update_logging(level="DEBUG")
+        mgr.reset()
+        cfg = mgr.load()
+        assert cfg["theme"] == DEFAULT_CONFIG["theme"]
+        assert cfg["ia"]["chunk_size"] == DEFAULT_CONFIG["ia"]["chunk_size"]
+        assert cfg["logging"]["level"] == DEFAULT_CONFIG["logging"]["level"]
+
+    def test_reset_preserves_app_name(self, temp_workspace: dict):
+        mgr = ConfigManager(temp_workspace["config"])
+        mgr.update(theme="light")
+        orig_name = mgr.load()["app_name"]
+        mgr.reset()
+        assert mgr.load()["app_name"] == orig_name
+
+
+class TestResetRoute:
+    def test_reset_via_post_redirects(self, client):
+        resp = client.post("/config/reset")
+        assert resp.status_code == 302
+        assert resp.location.endswith("/config/")
+
+    def test_reset_restores_defaults_on_disk(self, client, app):
+        cm = app.extensions["config_manager"]
+        cm.update(theme="dark")
+        cm.update_ia(chunk_size=999)
+        client.post("/config/reset")
+        cfg = cm.load()
+        assert cfg["theme"] == DEFAULT_CONFIG["theme"]
+        assert cfg["ia"]["chunk_size"] == DEFAULT_CONFIG["ia"]["chunk_size"]
+
+    def test_reset_returns_success_flash(self, client):
+        resp = client.post("/config/reset", follow_redirects=True)
+        assert resp.status_code == 200
+        assert b"Settings reset to defaults" in resp.data

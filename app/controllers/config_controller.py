@@ -126,3 +126,13 @@ def update():
         flash("Settings saved.", "success")
 
     return redirect(url_for("config.show"))
+
+
+@config_bp.route("/reset", methods=["POST"])
+def reset():
+    """Reset all configuration to factory defaults."""
+    config_manager = current_app.extensions["config_manager"]
+    config_manager.reset()
+    flash("Settings reset to defaults.", "success")
+    logger.info("Configuration reset to defaults by user")
+    return redirect(url_for("config.show"))

@@ -216,3 +216,9 @@ class ConfigManager:
         current["logging"] = logging_cfg
         self.save(current)
         return current
+
+    def reset(self) -> dict[str, Any]:
+        """Reset all settings to factory defaults and persist."""
+        config = deepcopy(DEFAULT_CONFIG)
+        self.save(config)
+        return config
