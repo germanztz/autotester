@@ -35,7 +35,11 @@ class _FakeLLM:
             raise OllamaUnavailable("Ollama down")
         words = prompt.split()
         keywords = [w.strip('",.!?;:') for w in words[1:4] if w.strip('",.!?;:')]
-        return json.dumps({"text_keywords": keywords})
+        return json.dumps({
+            "text_keywords": keywords,
+            "title": "Generated Title",
+            "language": "en",
+        })
 
 
 # ---------------------------------------------------------------------------
@@ -142,31 +146,35 @@ def _get_lazy(d):
 
 
 class TestGenerateTitle:
-    def test_generates_title(self, segmenter_and_lazy: dict, project_with_pdf):
+    def test_generates_title_and_language(self, segmenter_and_lazy: dict, project_with_pdf):
         entry, pdf_path, components = project_with_pdf
         lazy = components["lazy"]
         lazy.ensure_cache(entry.name, pdf_path)
-        title = lazy.generate_title(entry.name)
-        assert title != ""
+        title, language = lazy.generate_title(entry.name)
+        assert title == "Generated Title"
+        assert language == "en"
         persisted = lazy._load_state(entry.name)
         assert persisted.get("title") == title
+        assert persisted.get("language") == language
 
-    def test_skips_when_title_exists(self, segmenter_and_lazy: dict, project_with_pdf):
+    def test_skips_when_title_and_language_exist(self, segmenter_and_lazy: dict, project_with_pdf):
         entry, pdf_path, components = project_with_pdf
         lazy = components["lazy"]
         fake = components["fake"]
         lazy.ensure_cache(entry.name, pdf_path)
-        lazy._persist_state(entry.name, title="existing-title")
+        lazy._persist_state(entry.name, title="existing-title", language="fr")
         fake.call_count = 0
-        title = lazy.generate_title(entry.name)
+        title, language = lazy.generate_title(entry.name)
         assert title == "existing-title"
+        assert language == "fr"
         assert fake.call_count == 0
 
     def test_returns_empty_when_no_cache(self, segmenter_and_lazy: dict, project_with_pdf):
         entry, pdf_path, components = project_with_pdf
         lazy = components["lazy"]
-        title = lazy.generate_title(entry.name)
+        title, language = lazy.generate_title(entry.name)
         assert title == ""
+        assert language == ""
 
     def test_returns_empty_on_llm_failure(self, segmenter_and_lazy: dict):
         from tests.test_digest_engine import _FakeLLM
@@ -180,8 +188,9 @@ class TestGenerateTitle:
         entry = fm.save_upload(io.BytesIO(pdf_bytes), "doc.pdf", "failtitle")
         pdf_path = fm.project_path(entry.name) / "doc.pdf"
         lazy.ensure_cache(entry.name, pdf_path)
-        title = lazy.generate_title(entry.name)
+        title, language = lazy.generate_title(entry.name)
         assert title == ""
+        assert language == ""
 
 
 # ---------------------------------------------------------------------------

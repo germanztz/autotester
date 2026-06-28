@@ -32,15 +32,17 @@ _DEFAULT_USER_PROMPT_TPL = (
 )
 
 _DEFAULT_TITLE_SYSTEM_PROMPT = (
-    "You are a helpful assistant that generates concise, descriptive project "
-    "titles from document content. Respond with only the title, no extra text."
+    "You are a helpful assistant that analyzes document content. "
+    "Respond only with valid JSON, no extra text."
 )
 
 _DEFAULT_TITLE_USER_PROMPT_TPL = (
     "Based on the following text, generate a short title of 1 to 7 words that "
-    "represents the project. The title must be syntactically correct (not a "
-    "single concatenated word) and may include emojis to make it expressive.\n\n"
-    "{text}\n\nTitle:"
+    "represents the project and detect the language of the text. "
+    "Return a JSON object with two keys:\n"
+    '- "title": a concise, descriptive project title (may include emojis)\n'
+    '- "language": the ISO 639-1 language code (e.g., en, es, fr, de, pt, it)\n\n'
+    "{text}"
 )
 
 IA_DEFAULTS: dict[str, Any] = {

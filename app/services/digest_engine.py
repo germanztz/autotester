@@ -57,6 +57,7 @@ _DEFAULT_STATE: dict[str, Any] = {
     "total_keywords": 0,
     "consecutive_failures": 0,
     "title": "",
+    "language": "",
     "error": None,
     "updated_at": 0.0,
 }
@@ -124,41 +125,47 @@ class LazyAIManager:
             self._persist_state(project_name, total_words=total_words)
         return text
 
-    def generate_title(self, project_name: str) -> str:
-        """Generate a project title from the first 100 words of the cached text.
+    def generate_title(self, project_name: str) -> tuple[str, str]:
+        """Generate a project title and detect the document language.
 
         Uses the LLM with ``title_system_prompt`` and ``title_user_prompt_tpl``
-        from the IA config. Skips if a title was already generated.
+        from the IA config. Expects the LLM to return JSON with ``title`` and
+        ``language`` keys. Skips if both title and language were already set.
 
-        Returns the title or an empty string on failure. Non-fatal — the
-        supervisor continues with chunk processing regardless.
+        Returns ``(title, language)`` — either may be empty on failure.
+        Non-fatal — the supervisor continues with chunk processing regardless.
         """
         state = self._load_state(project_name)
-        if state.get("title"):
-            return state["title"]
+        if state.get("title") and state.get("language"):
+            return state["title"], state["language"]
 
         text_cache = self._project_dir(project_name) / f"{project_name}.txt"
         if not text_cache.exists():
             logger.warning("Cannot generate title: no text cache for %s", project_name)
-            return ""
+            return "", ""
 
         text = text_cache.read_text(encoding="utf-8")
         words = text.split()
         if not words:
             logger.warning("Cannot generate title: empty text for %s", project_name)
-            return ""
+            return "", ""
 
         first_words = " ".join(words[:100])
         settings = self.segmenter._get_ia_settings()
         model = settings["ollama_model"]
         system_prompt = settings.get(
             "title_system_prompt",
-            "You are a helpful assistant that generates concise, descriptive project titles.",
+            "You are a helpful assistant that analyzes document content. "
+            "Respond only with valid JSON, no extra text.",
         )
         user_prompt_tpl = settings.get(
             "title_user_prompt_tpl",
             "Based on the following text, generate a short title of 1 to 7 words "
-            "that represents the project:\n\n{text}\n\nTitle:",
+            "that represents the project and detect the language of the text.\n"
+            'Return a JSON object with two keys:\n'
+            '- "title": a concise, descriptive project title (may include emojis)\n'
+            '- "language": the ISO 639-1 language code (e.g., en, es, fr, de, pt, it)\n\n'
+            "{text}",
         )
         prompt = user_prompt_tpl.format(text=first_words)
 
@@ -175,18 +182,31 @@ class LazyAIManager:
                 "Title generation failed for %s: %s: %s",
                 project_name, type(exc).__name__, exc,
             )
-            return ""
+            return "", ""
 
-        title = raw.strip().strip('"').strip("'").strip()
+        result = raw.strip().strip('"').strip("'").strip()
+        title = ""
+        language = ""
+        try:
+            data = json.loads(result)
+            if isinstance(data, dict):
+                title = (data.get("title") or "").strip()
+                language = (data.get("language") or "").strip()
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        if not title:
+            title = result
+
         if title:
-            self._persist_state(project_name, title=title)
+            self._persist_state(project_name, title=title, language=language)
             logger.info(
-                "Title generation finished | project=%s title=%s",
-                project_name, title,
+                "Title generation finished | project=%s title=%s language=%s",
+                project_name, title, language,
             )
         else:
             logger.warning("Title generation returned empty for %s", project_name)
-        return title
+        return title, language
 
     def project_status(self, project_name: str) -> dict[str, Any]:
         """Return the current digest state for the project.

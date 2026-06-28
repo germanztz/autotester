@@ -128,7 +128,10 @@
                         ${stopForm}
                         <button type="button" class="btn btn-sm btn-link p-1"
                                 data-bs-toggle="modal" data-bs-target="#renameModal"
-                                data-project="${escapeHtml(p.name)}" title="Rename">
+                                data-project="${escapeHtml(p.name)}"
+                                data-digest-title="${escapeHtml(disp)}"
+                                data-digest-language="${escapeHtml(p.digest_language || '')}"
+                                title="Project options">
                             <i class="bi bi-pencil"></i>
                         </button>
                         <form method="POST" action="/files/${encodeURIComponent(p.name)}/delete"

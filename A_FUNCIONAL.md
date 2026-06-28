@@ -87,7 +87,7 @@ Las preguntas deben estar enfocadas a la memorización del contenido
 2. **Verdadero/Falso** — Determinar si una afirmación es correcta o incorrecta
 3. **Completar frase** — Rellenar el espacio en blanco con la palabra o concepto correcto
 4. **Pregunta abierta corta** — Responder con 1-3 palabras clave
-
+5. en el futuro se podrian añadir nuevos tipos de preguntas interactivas
 ---
 
 ## Reglas de Puntuación

@@ -70,14 +70,15 @@ def upload():
 
 @files_bp.route("/<project_name>/rename", methods=["POST"])
 def rename(project_name: str):
-    """Rename a project directory."""
-    new_name = request.form.get("new_name", "").strip()
-    if not new_name:
-        flash("New name cannot be empty.", "danger")
+    """Rename a project directory and update title/language metadata."""
+    title = (request.form.get("title") or request.form.get("new_name") or "").strip()
+    language = (request.form.get("language") or "").strip()
+    if not title:
+        flash("Title cannot be empty.", "danger")
         return redirect(url_for("main.index"))
 
-    safe_new = safe_project_name(new_name)
     file_manager = current_app.extensions["file_manager"]
+    safe_new = safe_project_name(title)
 
     try:
         final = file_manager.rename_project(project_name, safe_new)
@@ -86,7 +87,14 @@ def rename(project_name: str):
         flash(str(exc), "danger")
         return redirect(url_for("main.index"))
 
-    logger.info("Project renamed | %s -> %s", project_name, final)
+    lazy_ai = current_app.extensions.get("lazy_ai_manager")
+    if lazy_ai:
+        lazy_ai._persist_state(final, title=title, language=language)
+
+    logger.info(
+        "Project renamed | %s -> %s | title=%s language=%s",
+        project_name, final, title, language,
+    )
     flash(f"Renamed to '{final}'.", "success")
     return redirect(url_for("main.index"))
 

@@ -59,7 +59,10 @@
                         {% endif %}
                         <button type="button" class="btn btn-sm btn-link p-1"
                                 data-bs-toggle="modal" data-bs-target="#renameModal"
-                                data-project="{{ project.name }}" title="Rename">
+                                data-project="{{ project.name }}"
+                                data-digest-title="{{ project.digest_title or project.name }}"
+                                data-digest-language="{{ project.digest_language }}"
+                                title="Project options">
                             <i class="bi bi-pencil"></i>
                         </button>
                         <form method="POST" action="{{ url_for('files.delete', project_name=project.name) }}"

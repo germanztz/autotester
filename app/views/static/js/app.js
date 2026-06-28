@@ -35,9 +35,13 @@
         modal.addEventListener("show.bs.modal", function (event) {
             const button = event.relatedTarget;
             const project = button.getAttribute("data-project") || "";
-            const input = modal.querySelector("#renameInput");
+            const title = button.getAttribute("data-digest-title") || project;
+            const language = button.getAttribute("data-digest-language") || "";
+            const titleInput = modal.querySelector("#renameInput");
+            const languageInput = modal.querySelector("#languageInput");
             const form = modal.querySelector("#renameForm");
-            if (input) input.value = project;
+            if (titleInput) titleInput.value = title;
+            if (languageInput) languageInput.value = language;
             if (form) form.action = "/files/" + encodeURIComponent(project) + "/rename";
         });
     }

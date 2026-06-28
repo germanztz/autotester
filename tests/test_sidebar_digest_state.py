@@ -16,6 +16,8 @@ def _write_state(project_dir: Path, **fields) -> None:
         "total_chunks": 0,
         "chunks_processed": 0,
         "total_keywords": 0,
+        "title": "",
+        "language": "",
         "error": None,
         "updated_at": 0.0,
     }
@@ -54,6 +56,17 @@ class TestListProjectsWithDigestState:
         assert entries[0].digest_total_chunks == 5
         assert entries[0].digest_chunks_processed == 2
         assert entries[0].digest_total_keywords == 8
+
+    def test_project_with_title_and_language(self, temp_workspace):
+        fm = FileManager(temp_workspace["projects"])
+        proj = temp_workspace["projects"] / "docs"
+        proj.mkdir()
+        (proj / "x.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
+        _write_state(proj, state="complete", title="My Document", language="es")
+
+        entries = fm.list_projects()
+        assert entries[0].digest_title == "My Document"
+        assert entries[0].digest_language == "es"
 
     def test_project_with_complete_state(self, temp_workspace):
         fm = FileManager(temp_workspace["projects"])
