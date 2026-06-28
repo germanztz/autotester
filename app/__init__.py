@@ -13,10 +13,13 @@ from flask import Flask
 from app.config import Config
 from app.models.config_manager import ConfigManager
 from app.models.file_manager import FileManager
+from app.models.game_state import GameManager
 from app.models.semantic_segmenter import SemanticSegmenter
 from app.services.digest_engine import LazyAIManager
 from app.services.digest_supervisor import DigestSupervisor
 from app.services.job_runner import JobRunner
+from app.services.question_generator import QuestionGenerator
+from app.services.question_engine import QuestionEngine
 from app.utils.logging_setup import get_logger, setup_logging
 
 
@@ -72,11 +75,26 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
         ttl_seconds=float(app.config.get("JOB_TTL_SECONDS", 60.0)),
     )
 
+    game_manager = GameManager(file_manager=file_manager, config_manager=config_manager)
+    question_generator = QuestionGenerator(
+        llm_client=segmenter.llm,
+        config_manager=config_manager,
+    )
+    question_engine = QuestionEngine(
+        file_manager=file_manager,
+        config_manager=config_manager,
+        question_generator=question_generator,
+        game_manager=game_manager,
+    )
+
     app.extensions["config_manager"] = config_manager
     app.extensions["file_manager"] = file_manager
     app.extensions["segmenter"] = segmenter
     app.extensions["lazy_ai_manager"] = lazy_ai_manager
     app.extensions["job_runner"] = job_runner
+    app.extensions["game_manager"] = game_manager
+    app.extensions["question_generator"] = question_generator
+    app.extensions["question_engine"] = question_engine
 
     digest_supervisor = DigestSupervisor(
         lazy_ai_manager=lazy_ai_manager,
@@ -113,10 +131,12 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     from app.controllers.files_controller import files_bp
     from app.controllers.config_controller import config_bp
     from app.controllers.ai_controller import ai_bp
+    from app.controllers.game_controller import game_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(files_bp, url_prefix="/files")
     app.register_blueprint(config_bp, url_prefix="/config")
     app.register_blueprint(ai_bp, url_prefix="/ai")
+    app.register_blueprint(game_bp)
 
     return app

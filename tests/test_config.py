@@ -122,11 +122,13 @@ class TestConfigManagerReset:
         mgr.update(theme="dark")
         mgr.update_ia(chunk_size=999, chunk_overlap=100)
         mgr.update_logging(level="DEBUG")
+        mgr.update_game(language="fr", questions_per_paragraph=2)
         mgr.reset()
         cfg = mgr.load()
         assert cfg["theme"] == DEFAULT_CONFIG["theme"]
         assert cfg["ia"]["chunk_size"] == DEFAULT_CONFIG["ia"]["chunk_size"]
         assert cfg["logging"]["level"] == DEFAULT_CONFIG["logging"]["level"]
+        assert cfg["game"]["language"] == DEFAULT_CONFIG["game"]["language"]
 
     def test_reset_preserves_app_name(self, temp_workspace: dict):
         mgr = ConfigManager(temp_workspace["config"])

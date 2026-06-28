@@ -1,0 +1,125 @@
+"""Game controller — quiz gameplay routes."""
+from __future__ import annotations
+
+from flask import Blueprint, current_app, jsonify, request
+
+from app.utils.logging_setup import get_logger
+
+game_bp = Blueprint("game", __name__, url_prefix="/game")
+logger = get_logger()
+
+
+def _get_engine():
+    return current_app.extensions["question_engine"]
+
+
+@game_bp.route("/<project_name>/start", methods=["POST"])
+def start(project_name: str):
+    """Start (or resume) a game session for a project.
+
+    If questions have already been generated, returns current status.
+    Otherwise initialises state and begins generation.
+    """
+    engine = _get_engine()
+    try:
+        result = engine.start_game(project_name)
+        return jsonify(result), 200
+    except FileNotFoundError as exc:
+        logger.warning("Game start failed: %s", exc)
+        return jsonify({"error": str(exc)}), 404
+    except Exception as exc:
+        logger.error("Game start error for %s: %s", project_name, exc)
+        return jsonify({"error": f"Failed to start game: {exc}"}), 500
+
+
+@game_bp.route("/<project_name>/status", methods=["GET"])
+def status(project_name: str):
+    """Return current game status (progress, generation state)."""
+    engine = _get_engine()
+    try:
+        result = engine.get_game_status(project_name)
+        return jsonify(result), 200
+    except Exception as exc:
+        logger.error("Game status error for %s: %s", project_name, exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@game_bp.route("/<project_name>/next", methods=["GET"])
+def next_question(project_name: str):
+    """Return the next question for the user.
+
+    Returns the question data (excluding correct_answer) so the
+    client can display it. The answer is verified server-side.
+    """
+    engine = _get_engine()
+    state = engine.game_manager.load_state(project_name)
+    if state is None:
+        return jsonify({"error": "Game not started. Call /game/<name>/start first."}), 400
+
+    total_questions = sum(len(p.questions) for p in state.paragraphs)
+    if total_questions == 0:
+        return jsonify({"status": "generating", "message": "Questions are being generated."}), 202
+
+    result = engine.game_manager.get_next_question(state)
+    if result is None:
+        stats = engine.game_manager.get_stats(state)
+        return jsonify({"status": "complete", **stats}), 200
+
+    para_idx, q_idx, question = result
+    question_data = {
+        "para_idx": para_idx,
+        "q_idx": q_idx,
+        "type": question.question_type,
+        "question": question.question_text,
+        "progress_pct": engine.game_manager.calculate_progress(state),
+    }
+    if question.question_type == "multiple_choice":
+        question_data["options"] = question.options
+    elif question.question_type == "true_false":
+        question_data["options"] = ["true", "false"]
+
+    return jsonify(question_data), 200
+
+
+@game_bp.route("/<project_name>/answer", methods=["POST"])
+def answer(project_name: str):
+    """Submit an answer and get feedback."""
+    data = request.get_json(silent=True) or {}
+    para_idx = data.get("para_idx")
+    q_idx = data.get("q_idx")
+    user_answer = (data.get("answer") or "").strip()
+
+    if para_idx is None or q_idx is None or not user_answer:
+        return jsonify({"error": "Missing para_idx, q_idx, or answer"}), 400
+
+    engine = _get_engine()
+    state = engine.game_manager.load_state(project_name)
+    if state is None:
+        return jsonify({"error": "Game not started."}), 400
+
+    try:
+        result = engine.game_manager.submit_answer(
+            state, int(para_idx), int(q_idx), user_answer
+        )
+        return jsonify(result), 200
+    except (IndexError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@game_bp.route("/<project_name>/reset", methods=["POST"])
+def reset(project_name: str):
+    """Reset game progress for a project."""
+    engine = _get_engine()
+    state = engine.game_manager.load_state(project_name)
+    if state is None:
+        return jsonify({"error": "Game not started."}), 400
+
+    num_paragraphs = len(state.paragraphs)
+    try:
+        new_state = engine.game_manager.reset_game(project_name, num_paragraphs)
+        stats = engine.game_manager.get_stats(new_state)
+        logger.info("Game reset for %s", project_name)
+        return jsonify({"status": "reset", **stats}), 200
+    except Exception as exc:
+        logger.error("Game reset error for %s: %s", project_name, exc)
+        return jsonify({"error": str(exc)}), 500

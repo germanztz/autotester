@@ -65,14 +65,9 @@
             document.querySelectorAll(".project-item").forEach(function (el) {
                 el.classList.remove("active");
             });
-            document.getElementById("panel-title").innerHTML =
-                '<i class="bi bi-robot"></i> autotester';
-            document.getElementById("panel-content").innerHTML =
-                '<div class="card shadow-sm mt-3">' +
-                '<div class="card-body text-center text-muted py-5">' +
-                '<i class="bi bi-folder2-open d-block fs-1 mb-3"></i>' +
-                '<p class="mb-0">Select a project from the sidebar to view details.</p>' +
-                "</div></div>";
+            if (window.QuizUI) {
+                QuizUI.deselectProject();
+            }
             return;
         }
         selectedProject = name;
@@ -83,13 +78,9 @@
             '#project-list [data-project-name="' + CSS.escape(selectedProject) + '"]'
         );
         var display = el ? el.dataset.digestTitle : name;
-        document.getElementById("panel-title").innerHTML =
-            '<i class="bi bi-file-earmark-text"></i> ' + escapeHtml(display);
-        document.getElementById("panel-content").innerHTML =
-            '<div class="card shadow-sm mt-3">' +
-            '<div class="card-body">' +
-            '<p class="text-muted mb-0">Project <strong>' + escapeHtml(display) +
-            "</strong> selected.</p></div></div>";
+        if (window.QuizUI) {
+            QuizUI.selectProject(name, display);
+        }
     }
 
     function restoreSelection() {

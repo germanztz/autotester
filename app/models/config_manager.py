@@ -60,16 +60,25 @@ LOGGING_DEFAULTS: dict[str, Any] = {
     "level": "INFO",
 }
 
+GAME_DEFAULTS: dict[str, Any] = {
+    "language": "es",
+    "questions_per_paragraph": 5,
+    "correct_to_master": 3,
+    "model": "qwen3.5:latest",
+}
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "theme": "system",
     "app_name": "autotester",
     "auto_refresh": True,
     "ia": deepcopy(IA_DEFAULTS),
     "logging": deepcopy(LOGGING_DEFAULTS),
+    "game": deepcopy(GAME_DEFAULTS),
 }
 
 _VALID_IA_KEYS = set(IA_DEFAULTS.keys())
 _VALID_LOGGING_KEYS = set(LOGGING_DEFAULTS.keys())
+_VALID_GAME_KEYS = set(GAME_DEFAULTS.keys())
 
 
 def _validate_ia(ia: dict[str, Any]) -> None:
@@ -99,6 +108,25 @@ def _validate_ia(ia: dict[str, Any]) -> None:
         raise ValueError("title_user_prompt_tpl must be a non-empty string")
     if "{text}" not in title_user_prompt_tpl:
         raise ValueError("title_user_prompt_tpl must contain the {text} placeholder")
+
+
+def _validate_game(game_cfg: dict[str, Any]) -> None:
+    """Raise ValueError if the game section is invalid."""
+    unknown = set(game_cfg) - _VALID_GAME_KEYS
+    if unknown:
+        raise ValueError(f"Unknown game keys: {sorted(unknown)}")
+    language = game_cfg.get("language", GAME_DEFAULTS["language"])
+    if not isinstance(language, str) or not language.strip():
+        raise ValueError("game.language must be a non-empty string")
+    qpp = game_cfg.get("questions_per_paragraph", GAME_DEFAULTS["questions_per_paragraph"])
+    if not isinstance(qpp, int) or qpp <= 0:
+        raise ValueError("game.questions_per_paragraph must be a positive integer")
+    ctm = game_cfg.get("correct_to_master", GAME_DEFAULTS["correct_to_master"])
+    if not isinstance(ctm, int) or ctm <= 0:
+        raise ValueError("game.correct_to_master must be a positive integer")
+    model = game_cfg.get("model", GAME_DEFAULTS["model"])
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError("game.model must be a non-empty string")
 
 
 def _validate_logging(logging_cfg: dict[str, Any]) -> None:
@@ -163,6 +191,19 @@ class ConfigManager:
         logging_merged["level"] = str(logging_merged["level"]).upper()
         merged["logging"] = logging_merged
 
+        # Merge game defaults for missing keys and sanitize invalid input.
+        game_cfg = merged.get("game")
+        if not isinstance(game_cfg, dict):
+            game_cfg = {}
+        game_merged = deepcopy(GAME_DEFAULTS)
+        game_merged.update(
+            {k: v for k, v in game_cfg.items() if k in _VALID_GAME_KEYS}
+        )
+        # Coerce numeric fields to int if they came in as strings.
+        game_merged["questions_per_paragraph"] = int(game_merged["questions_per_paragraph"])
+        game_merged["correct_to_master"] = int(game_merged["correct_to_master"])
+        merged["game"] = game_merged
+
         if not self.config_path.exists():
             self.save(merged)
 
@@ -214,6 +255,19 @@ class ConfigManager:
         logging_cfg.update(kwargs)
         _validate_logging(logging_cfg)
         current["logging"] = logging_cfg
+        self.save(current)
+        return current
+
+    def update_game(self, **kwargs: Any) -> dict[str, Any]:
+        """Update game settings and persist. Validates before saving.
+
+        Unknown keys raise ``ValueError``.
+        """
+        current = self.load()
+        game = deepcopy(current.get("game") or {})
+        game.update(kwargs)
+        _validate_game(game)
+        current["game"] = game
         self.save(current)
         return current
 
