@@ -6,8 +6,11 @@
 <form method="POST" action="{{ url_for('config.update') }}" id="config-form">
 
 <div class="card shadow-sm mb-3">
-    <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-palette"></i> Theme</h5>
+    <div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#collapseTheme" aria-expanded="false" aria-controls="collapseTheme">
+        <h5 class="mb-0"><i class="bi bi-palette"></i> Theme</h5>
+    </div>
+    <div id="collapseTheme" class="collapse">
+        <div class="card-body">
             <div class="mb-3">
                 <div class="d-flex gap-3 flex-wrap">
                     {% for value, label, icon in [
@@ -26,20 +29,24 @@
                 </div>
                 <div class="form-text">"System" follows your operating system preference.</div>
             </div>
+        </div>
     </div>
 </div>
 
 <div class="card shadow-sm mb-3">
-    <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-cpu"></i> Artificial Intelligence</h5>
-        <p class="text-muted small">
-            PDF ingestion uses a local <strong>LLM</strong> (via Ollama) for
-            semantic segmentation and keyword extraction.
-        </p>
-        <div class="alert alert-{{ 'success' if ollama_ok else 'warning' }} d-flex align-items-center py-2 small">
-            <i class="bi bi-{{ 'check-circle' if ollama_ok else 'exclamation-triangle' }} me-2"></i>
-            <span>{{ ollama_msg }}</span>
-        </div>
+    <div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#collapseAI" aria-expanded="false" aria-controls="collapseAI">
+        <h5 class="mb-0"><i class="bi bi-cpu"></i> Artificial Intelligence</h5>
+    </div>
+    <div id="collapseAI" class="collapse">
+        <div class="card-body">
+            <p class="text-muted small">
+                PDF ingestion uses a local <strong>LLM</strong> (via Ollama) for
+                semantic segmentation and keyword extraction.
+            </p>
+            <div class="alert alert-{{ 'success' if ollama_ok else 'warning' }} d-flex align-items-center py-2 small">
+                <i class="bi bi-{{ 'check-circle' if ollama_ok else 'exclamation-triangle' }} me-2"></i>
+                <span>{{ ollama_msg }}</span>
+            </div>
 
             <div class="mb-3">
                 <label class="form-label" for="ollama_url">Ollama URL</label>
@@ -65,17 +72,21 @@
                            value="{{ app_config.ia.chunk_overlap }}" required>
                 </div>
             </div>
+        </div>
     </div>
 </div>
 
 <div class="card shadow-sm mb-3">
-    <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-chat-quote"></i> Prompts</h5>
-        <p class="text-muted small">
-            Configure how the LLM processes PDF content. The extract concepts
-            prompt is sent for every text chunk; the extract title prompt is
-            sent once per project to generate a display name.
-        </p>
+    <div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#collapsePrompts" aria-expanded="false" aria-controls="collapsePrompts">
+        <h5 class="mb-0"><i class="bi bi-chat-quote"></i> Prompts</h5>
+    </div>
+    <div id="collapsePrompts" class="collapse">
+        <div class="card-body">
+            <p class="text-muted small">
+                Configure how the LLM processes PDF content. The extract concepts
+                prompt is sent for every text chunk; the extract title prompt is
+                sent once per project to generate a display name.
+            </p>
             <div class="mb-3">
                 <label class="form-label" for="system_prompt">System prompt</label>
                 <textarea class="form-control font-monospace" id="system_prompt" name="system_prompt" rows="4">{{ app_config.ia.system_prompt }}</textarea>
@@ -96,18 +107,22 @@
                     text. Use <code>{text}</code> as a placeholder.
                 </div>
             </div>
+        </div>
     </div>
 </div>
 
 <div class="card shadow-sm mb-3">
-    <div class="card-body">
-        <h5 class="card-title"><i class="bi bi-terminal"></i> Logging</h5>
-        <p class="text-muted small">
-            Application actions are logged to <strong>stderr</strong>. The
-            current level is <code>{{ log_level }}</code>. Use
-            <code>DEBUG</code> to see HTTP requests, chunk counts and retry
-            attempts.
-        </p>
+    <div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#collapseLogging" aria-expanded="false" aria-controls="collapseLogging">
+        <h5 class="mb-0"><i class="bi bi-terminal"></i> Logging</h5>
+    </div>
+    <div id="collapseLogging" class="collapse">
+        <div class="card-body">
+            <p class="text-muted small">
+                Application actions are logged to <strong>stderr</strong>. The
+                current level is <code>{{ log_level }}</code>. Use
+                <code>DEBUG</code> to see HTTP requests, chunk counts and retry
+                attempts.
+            </p>
             <div class="mb-3">
                 <label class="form-label" for="log_level">Log level</label>
                 <select class="form-select" id="log_level" name="log_level">
@@ -119,6 +134,7 @@
                     Override at launch with <code>AUTOTESTER_LOG_LEVEL=DEBUG python run.py</code>.
                 </div>
             </div>
+        </div>
     </div>
 </div>
 
