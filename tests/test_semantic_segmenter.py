@@ -12,7 +12,7 @@ from app.models.semantic_segmenter import (
     SemanticRecord,
     SemanticSegmenter,
     _chunk_text_by_words,
-    _parse_llm_response,
+    _parse_keywords_response,
 )
 
 
@@ -45,7 +45,6 @@ class TestChunkTextByWords:
         text = " ".join(f"word{i}" for i in range(10))
         chunks = _chunk_text_by_words(text, 4, 1)
         assert len(chunks) >= 2
-        # Verify overlap: second chunk starts before first chunk ends
         _, _, first_end = chunks[0]
         _, second_start, _ = chunks[1]
         assert second_start < first_end
@@ -61,40 +60,39 @@ class TestChunkTextByWords:
 
 
 # ---------------------------------------------------------------------------
-# LLM response parsing
+# Keywords response parsing
 # ---------------------------------------------------------------------------
 
 
-class TestParseLLMResponse:
+class TestParseKeywordsResponse:
     def test_parses_valid_json(self):
-        raw = '{"original_text": "grouped text", "text_keywords": ["kw1", "kw2"]}'
-        data = _parse_llm_response(raw)
-        assert data["original_text"] == "grouped text"
-        assert data["text_keywords"] == ["kw1", "kw2"]
+        raw = '{"text_keywords": ["kw1", "kw2"]}'
+        keywords = _parse_keywords_response(raw)
+        assert keywords == ["kw1", "kw2"]
 
     def test_strips_markdown_code_fence(self):
-        raw = '```json\n{"original_text": "hello", "text_keywords": ["kw"]}\n```'
-        data = _parse_llm_response(raw)
-        assert data["original_text"] == "hello"
+        raw = '```json\n{"text_keywords": ["kw"]}\n```'
+        keywords = _parse_keywords_response(raw)
+        assert keywords == ["kw"]
 
     def test_strips_markdown_code_fence_no_lang(self):
-        raw = '```\n{"original_text": "hello", "text_keywords": ["kw"]}\n```'
-        data = _parse_llm_response(raw)
-        assert data["original_text"] == "hello"
-
-    def test_raises_on_missing_original_text(self):
-        raw = '{"text_keywords": ["kw"]}'
-        with pytest.raises(ValueError, match="missing 'original_text'"):
-            _parse_llm_response(raw)
+        raw = '```\n{"text_keywords": ["kw"]}\n```'
+        keywords = _parse_keywords_response(raw)
+        assert keywords == ["kw"]
 
     def test_raises_on_missing_text_keywords(self):
         raw = '{"original_text": "hello"}'
         with pytest.raises(ValueError, match="missing 'text_keywords'"):
-            _parse_llm_response(raw)
+            _parse_keywords_response(raw)
+
+    def test_accepts_empty_keywords(self):
+        raw = '{"text_keywords": []}'
+        keywords = _parse_keywords_response(raw)
+        assert keywords == []
 
     def test_raises_on_invalid_json(self):
         with pytest.raises(ValueError, match="not valid JSON"):
-            _parse_llm_response("not json")
+            _parse_keywords_response("not json")
 
 
 # ---------------------------------------------------------------------------
@@ -104,11 +102,16 @@ class TestParseLLMResponse:
 
 class TestSemanticRecord:
     def test_to_dict(self):
-        r = SemanticRecord(original_text="hello", text_keywords=["kw"], last_index=5)
+        r = SemanticRecord(original_text="hello", text_keywords=["kw"])
         d = r.to_dict()
         assert d["original_text"] == "hello"
         assert d["text_keywords"] == ["kw"]
-        assert d["last_index"] == 5
+
+    def test_to_dict_with_none_keywords(self):
+        r = SemanticRecord(original_text="hello", text_keywords=None)
+        d = r.to_dict()
+        assert d["original_text"] == "hello"
+        assert d["text_keywords"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -134,13 +137,9 @@ class FakeOllamaChat:
         if self.fail:
             from app.models.llm_client import OllamaUnavailable
             raise OllamaUnavailable("Ollama down")
-        # Extract first 3 words from prompt as keywords
         words = prompt.split()
         keywords = [w.strip('",.!?;:') for w in words[1:4] if w.strip('",.!?;:')]
-        return json.dumps({
-            "original_text": prompt,
-            "text_keywords": keywords,
-        })
+        return json.dumps({"text_keywords": keywords})
 
 
 @pytest.fixture
@@ -236,18 +235,15 @@ class TestSemanticSegmenter:
         text = " ".join(f"word{i}" for i in range(50))
         chunks = segmenter.chunk_text(text)
         assert len(chunks) >= 1
-        # Default chunk_size=400, so 50 words should fit in one chunk
         assert len(chunks) == 1
 
-        # Override config to smaller chunk size
         segmenter.config_manager.update_ia(chunk_size=10, chunk_overlap=2)
         chunks = segmenter.chunk_text(text)
         assert len(chunks) >= 5
 
-    def test_process_chunk(self, segmenter: SemanticSegmenter, fake_llm: FakeOllamaChat):
+    def test_extract_keywords(self, segmenter: SemanticSegmenter, fake_llm: FakeOllamaChat):
         text = "the quick brown fox jumps over the lazy dog"
-        grouped, keywords = segmenter.process_chunk(text, "qwen3.5:latest")
-        assert isinstance(grouped, str)
+        keywords = segmenter.extract_keywords(text, "qwen3.5:latest")
         assert isinstance(keywords, list)
         assert len(keywords) >= 1
 
@@ -266,11 +262,9 @@ class TestSemanticSegmenter:
         pdf_path = tmp_path / "test.pdf"
         pdf_path.write_bytes(buf.getvalue())
         fm = FileManager(tmp_path / "projects")
-        # Use raw segmenter; manually set file_manager's root
         segmenter.file_manager = fm
         text = segmenter.ensure_text_cache("testproj", pdf_path)
         assert "cached text content" in text
-        # Verify cache file exists
         cache = fm.project_path("testproj") / "testproj.txt"
         assert cache.exists()
 
@@ -285,5 +279,29 @@ class TestSemanticSegmenter:
         text = segmenter.ensure_text_cache("testproj", tmp_path / "ghost.pdf")
         assert text == "existing content"
 
+    def test_init_chunks_writes_json(self, segmenter: SemanticSegmenter, tmp_path: Path):
+        from app.models.file_manager import FileManager
 
+        fm = FileManager(tmp_path / "projects")
+        segmenter.file_manager = fm
+        texts = ["chunk one text", "chunk two text", "chunk three text"]
+        chunks = segmenter._init_chunks("testproj", texts)
+        assert len(chunks) == 3
+        assert chunks[0]["original_text"] == "chunk one text"
+        assert chunks[0]["text_keywords"] is None
+        path = segmenter._chunks_json_path("testproj")
+        assert path.exists()
 
+    def test_save_and_load_chunks(self, segmenter: SemanticSegmenter, tmp_path: Path):
+        from app.models.file_manager import FileManager
+
+        fm = FileManager(tmp_path / "projects")
+        segmenter.file_manager = fm
+        chunks = [{"original_text": "hello", "text_keywords": None}]
+        segmenter._save_chunks("testproj", chunks)
+        loaded = segmenter._load_chunks("testproj")
+        assert loaded == chunks
+        loaded[0]["text_keywords"] = ["kw"]
+        segmenter._save_chunks("testproj", loaded)
+        reloaded = segmenter._load_chunks("testproj")
+        assert reloaded[0]["text_keywords"] == ["kw"]

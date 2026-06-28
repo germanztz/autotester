@@ -13,7 +13,6 @@ def _write_state(project_dir: Path, **fields) -> None:
     state = {
         "state": "queued",
         "total_words": 0,
-        "last_index": 0,
         "total_chunks": 0,
         "chunks_processed": 0,
         "total_keywords": 0,
@@ -37,7 +36,6 @@ class TestListProjectsWithDigestState:
         assert e.name == "fresh"
         assert e.digest_state == "queued"
         assert e.digest_total_words == 0
-        assert e.digest_last_index == 0
         assert e.digest_total_chunks == 0
         assert e.digest_chunks_processed == 0
         assert e.digest_total_keywords == 0
@@ -48,12 +46,11 @@ class TestListProjectsWithDigestState:
         proj = temp_workspace["projects"] / "p"
         proj.mkdir()
         (proj / "x.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
-        _write_state(proj, state="processing", total_words=1000, last_index=300, total_chunks=5, chunks_processed=2, total_keywords=8)
+        _write_state(proj, state="processing", total_words=1000, total_chunks=5, chunks_processed=2, total_keywords=8)
 
         entries = fm.list_projects()
         assert entries[0].digest_state == "processing"
         assert entries[0].digest_total_words == 1000
-        assert entries[0].digest_last_index == 300
         assert entries[0].digest_total_chunks == 5
         assert entries[0].digest_chunks_processed == 2
         assert entries[0].digest_total_keywords == 8

@@ -35,10 +35,7 @@ class _FakeLLM:
             raise OllamaUnavailable("Ollama down")
         words = prompt.split()
         keywords = [w.strip('",.!?;:') for w in words[1:4] if w.strip('",.!?;:')]
-        return (
-            '{"original_text": "grouped ' + " ".join(words[:5]) + '", '
-            '"text_keywords": ' + json.dumps(keywords) + '}'
-        )
+        return json.dumps({"text_keywords": keywords})
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +126,6 @@ class TestEnsureCache:
 
     def test_idempotent(self, segmenter_and_lazy: dict, project_with_pdf):
         entry, pdf_path, _ = project_with_pdf
-        lazy = segmenter_and_lazy["lazy"] if isinstance(segmenter_and_lazy, dict) else segmenter_and_lazy
         lazy = _get_lazy(segmenter_and_lazy)
         first = lazy.ensure_cache(entry.name, pdf_path)
         second = lazy.ensure_cache(entry.name, pdf_path)
@@ -149,11 +145,9 @@ class TestGenerateTitle:
     def test_generates_title(self, segmenter_and_lazy: dict, project_with_pdf):
         entry, pdf_path, components = project_with_pdf
         lazy = components["lazy"]
-        # ensure_cache first so the .txt file exists
         lazy.ensure_cache(entry.name, pdf_path)
         title = lazy.generate_title(entry.name)
         assert title != ""
-        # the fake LLM returns text from the prompt — should be non-empty
         persisted = lazy._load_state(entry.name)
         assert persisted.get("title") == title
 
@@ -166,12 +160,11 @@ class TestGenerateTitle:
         fake.call_count = 0
         title = lazy.generate_title(entry.name)
         assert title == "existing-title"
-        assert fake.call_count == 0  # LLM was not called
+        assert fake.call_count == 0
 
     def test_returns_empty_when_no_cache(self, segmenter_and_lazy: dict, project_with_pdf):
         entry, pdf_path, components = project_with_pdf
         lazy = components["lazy"]
-        # Don't call ensure_cache — no .txt file exists
         title = lazy.generate_title(entry.name)
         assert title == ""
 
@@ -179,7 +172,6 @@ class TestGenerateTitle:
         from tests.test_digest_engine import _FakeLLM
         lazy = segmenter_and_lazy["lazy"]
         fm = segmenter_and_lazy["fm"]
-        # Create a project with an LLM that always fails
         failing_llm = _FakeLLM(fail=True)
         seg = segmenter_and_lazy["seg"]
         seg.llm = failing_llm
@@ -202,7 +194,6 @@ class TestProcessOneChunk:
         entry, pdf_path, components = project_with_pdf
         lazy = components["lazy"]
         seg = components["seg"]
-        # Use small chunks so we get multiple chunks
         seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
         lazy.ensure_cache(entry.name, pdf_path)
         info = lazy.process_one_chunk(entry.name)
@@ -222,8 +213,24 @@ class TestProcessOneChunk:
         data = json.loads(chunks_path.read_text(encoding="utf-8"))
         assert len(data) >= 1
         assert "original_text" in data[0]
-        assert "text_keywords" in data[0]
-        assert "last_index" in data[0]
+        # First chunk should have text_keywords set (list or null)
+        assert data[0]["text_keywords"] is not None
+
+    def test_chunks_initially_have_null_keywords(self, project_with_pdf):
+        entry, pdf_path, components = project_with_pdf
+        lazy = components["lazy"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        # Process one chunk to trigger init
+        lazy.process_one_chunk(entry.name)
+        chunks_path = components["fm"].project_path(entry.name) / "chunks.json"
+        data = json.loads(chunks_path.read_text(encoding="utf-8"))
+        assert data[0]["text_keywords"] is not None  # first was processed
+        # Remaining chunks may exist and are null
+        if len(data) > 1:
+            for c in data[1:]:
+                assert c["text_keywords"] is None
 
     def test_updates_digest_state(self, project_with_pdf):
         entry, pdf_path, components = project_with_pdf
@@ -235,16 +242,13 @@ class TestProcessOneChunk:
         state = lazy.project_status(entry.name)
         assert state["chunks_processed"] >= 1
         assert state["total_keywords"] >= 1
-        assert state["last_index"] > 0
 
     def test_returns_none_when_complete(self, project_with_pdf):
         entry, pdf_path, components = project_with_pdf
         lazy = components["lazy"]
         seg = components["seg"]
-        # Force small chunks so we get multiple chunks
         seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
         lazy.ensure_cache(entry.name, pdf_path)
-        # Process until None
         while True:
             info = lazy.process_one_chunk(entry.name)
             if info is None:
@@ -258,10 +262,8 @@ class TestProcessOneChunk:
         seg = components["seg"]
         seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
         lazy.ensure_cache(entry.name, pdf_path)
-        # Process 2 chunks
         lazy.process_one_chunk(entry.name)
         lazy.process_one_chunk(entry.name)
-        # Resume
         info = lazy.process_one_chunk(entry.name)
         assert info is not None
         assert info["chunk"] >= 3
@@ -309,7 +311,6 @@ class TestCancel:
         seg = components["seg"]
         seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
         lazy.ensure_cache(entry.name, pdf_path)
-        # Simulate cancel after first chunk
         processed = 0
         for _ in range(10):
             if lazy.is_cancelled(entry.name):

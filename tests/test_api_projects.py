@@ -43,7 +43,6 @@ class TestApiProjects:
             "size_bytes",
             "digest_state",
             "digest_total_words",
-            "digest_last_index",
             "digest_total_chunks",
             "digest_chunks_processed",
             "digest_total_keywords",
@@ -67,7 +66,6 @@ class TestApiProjects:
                 {
                     "state": "processing",
                     "total_words": 1000,
-                    "last_index": 300,
                     "total_chunks": 5,
                     "chunks_processed": 2,
                     "total_keywords": 8,
@@ -83,4 +81,4 @@ class TestApiProjects:
         proj = next(p for p in data["projects"] if p["name"] == "digestme")
         assert proj["digest_state"] == "processing"
         assert proj["digest_total_words"] == 1000
-        assert proj["digest_last_index"] == 300
+        assert proj["digest_total_chunks"] == 5

@@ -36,8 +36,8 @@
                             {% elif project.digest_state == 'error' %}
                                 <span class="text-danger">Error</span>
                             {% elif project.digest_state == 'processing' or project.digest_state == 'queued' %}
-                                {% if project.digest_total_words > 0 %}
-                                    processing {{ (project.digest_last_index / project.digest_total_words * 100) | int }}%
+                                {% if project.digest_total_chunks > 0 %}
+                                    processing {{ (project.digest_chunks_processed / project.digest_total_chunks * 100) | int }}%
                                 {% else %}
                                     processing 0%
                                 {% endif %}

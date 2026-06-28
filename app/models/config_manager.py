@@ -23,14 +23,12 @@ _DEFAULT_SYSTEM_PROMPT = (
 )
 
 _DEFAULT_USER_PROMPT_TPL = (
-    'Analyze the following text chunk. Group related concepts, maintain the '
-    'original meaning and coherence, and extract 3-7 keywords that represent '
-    'the main topics.\n\n'
-    'IMPORTANT: Never translate the text content or the keywords. They must '
-    'remain in the original document language.\n\n'
+    'Extract 1 to 10 keywords that represent the main topics from the following text.\n\n'
     'Text:\n{text}\n\n'
-    'Return ONLY valid JSON with exactly these fields (no markdown, no extra text):\n'
-    '{{"original_text": "the semantically grouped text", "text_keywords": ["kw1", "kw2", ...]}}'
+    'Return ONLY valid JSON with exactly this field (no markdown, no extra text):\n'
+    '{{"text_keywords": ["kw1", "kw2", ...]}}\n\n'
+    'If no meaningful keywords can be extracted, return:\n'
+    '{{"text_keywords": []}}'
 )
 
 _DEFAULT_TITLE_SYSTEM_PROMPT = (

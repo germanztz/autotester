@@ -1,9 +1,8 @@
 """Semantic segmentation engine for autotester.
 
-Replaces the old RAG/ChromaDB pipeline. Extracts raw text from a PDF,
-splits it into word-based chunks, sends each chunk to a local LLM (via
-Ollama) for concept grouping and keyword extraction, and persists the
-results incrementally to ``chunks.json``.
+Splits PDF text into word-based chunks programmatically, sends each chunk
+to a local LLM (via Ollama) for keyword extraction, and persists results
+to ``chunks.json``.
 """
 from __future__ import annotations
 
@@ -28,8 +27,7 @@ class SemanticRecord:
     """A single processed chunk stored in ``chunks.json``."""
 
     original_text: str
-    text_keywords: list[str]
-    last_index: int  # word index in the original text where this chunk ends
+    text_keywords: list[str] | None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -40,19 +38,18 @@ class SemanticRecord:
 # ---------------------------------------------------------------------------
 
 
-_SYSTEM_PROMPT = (
-    "You are a semantic text analyzer. Your task is to group related concepts "
-    "together, maintain the original meaning and flow, and extract key keywords "
-    "from each text chunk."
+_KEYWORDS_SYSTEM_PROMPT = (
+    "You are a keyword extraction assistant. Your task is to extract the most "
+    "important keywords from the given text chunk."
 )
 
-_USER_PROMPT_TPL = (
-    'Analyze the following text chunk. Group related concepts, maintain the '
-    'original meaning and coherence, and extract 3-7 keywords that represent '
-    'the main topics.\n\n'
+_KEYWORDS_USER_PROMPT_TPL = (
+    'Extract 1 to 10 keywords that represent the main topics from the following text.\n\n'
     'Text:\n{text}\n\n'
-    'Return ONLY valid JSON with exactly these fields (no markdown, no extra text):\n'
-    '{{"original_text": "the semantically grouped text", "text_keywords": ["kw1", "kw2", ...]}}'
+    'Return ONLY valid JSON with exactly this field (no markdown, no extra text):\n'
+    '{{"text_keywords": ["kw1", "kw2", ...]}}\n\n'
+    'If no meaningful keywords can be extracted, return:\n'
+    '{{"text_keywords": []}}'
 )
 
 
@@ -85,18 +82,20 @@ def _chunk_text_by_words(text: str, chunk_size: int, chunk_overlap: int) -> list
     return chunks
 
 
-def _parse_llm_response(raw: str) -> dict[str, Any]:
-    """Parse the LLM response JSON, with fallback for common wrapping."""
+def _parse_keywords_response(raw: str) -> list[str]:
+    """Parse the LLM response JSON and return the keywords list.
+
+    Expects ``{"text_keywords": ["kw1", "kw2", ...]}``.
+    Returns the list (may be empty).
+    """
     cleaned = raw.strip()
     if not cleaned:
         raise ValueError("LLM returned an empty response — check that the model is installed and the prompt is valid")
     # Strip markdown code fences if present
     if cleaned.startswith("```"):
-        # Remove opening fence (possibly with language tag)
         first_nl = cleaned.find("\n")
         if first_nl != -1:
             cleaned = cleaned[first_nl + 1:]
-        # Remove closing fence
         if cleaned.endswith("```"):
             cleaned = cleaned[:-3].rstrip()
     cleaned = cleaned.strip()
@@ -109,15 +108,13 @@ def _parse_llm_response(raw: str) -> dict[str, Any]:
         raise ValueError(
             f"LLM response is not valid JSON: {exc}. First 200 characters: {raw[:200]}"
         ) from exc
-    if not isinstance(data.get("original_text"), str):
-        raise ValueError("LLM response missing 'original_text'")
     if not isinstance(data.get("text_keywords"), list):
         raise ValueError("LLM response missing 'text_keywords' array")
-    return data
+    return data["text_keywords"]
 
 
 class SemanticSegmenter:
-    """Orchestrate PDF text extraction, chunking, LLM processing and JSON persistence."""
+    """Orchestrate PDF text extraction, chunking, LLM keyword extraction and JSON persistence."""
 
     def __init__(
         self,
@@ -149,8 +146,8 @@ class SemanticSegmenter:
             "ollama_model": "qwen3.5:latest",
             "chunk_size": 400,
             "chunk_overlap": 50,
-            "system_prompt": _SYSTEM_PROMPT,
-            "user_prompt_tpl": _USER_PROMPT_TPL,
+            "system_prompt": _KEYWORDS_SYSTEM_PROMPT,
+            "user_prompt_tpl": _KEYWORDS_USER_PROMPT_TPL,
         }
         ia = cfg.get("ia") or {}
         merged = dict(defaults)
@@ -195,21 +192,19 @@ class SemanticSegmenter:
             chunk_overlap=int(settings["chunk_overlap"]),
         )
 
-    # ----- LLM processing -----------------------------------------------
+    # ----- LLM keyword extraction ---------------------------------------
 
-    def process_chunk(self, chunk_text: str, model: str) -> tuple[str, list[str]]:
-        """Send a chunk to the LLM and return ``(original_text, keywords)``."""
+    def extract_keywords(self, chunk_text: str, model: str) -> list[str]:
+        """Send a chunk to the LLM and return the extracted keywords list."""
         settings = self._get_ia_settings()
         system_prompt = settings["system_prompt"]
         user_prompt_tpl = settings["user_prompt_tpl"]
         prompt = user_prompt_tpl.format(text=chunk_text)
         logger.info(
-            "LLM call | model=%s chunk_words=%d chunk_preview=%.200s prompt_preview=%.200s system_len=%d",
+            "LLM call | model=%s chunk_words=%d chunk_preview=%.200s",
             model,
             len(chunk_text.split()),
             chunk_text,
-            prompt,
-            len(system_prompt),
         )
         raw = self.llm.generate(model, prompt, system=system_prompt)
         logger.info(
@@ -224,8 +219,7 @@ class SemanticSegmenter:
                 f"LLM returned empty response for model {model!r}. "
                 "Verify the model is installed: run 'ollama pull {model}'"
             )
-        data = _parse_llm_response(raw)
-        return data["original_text"], data["text_keywords"]
+        return _parse_keywords_response(raw)
 
     # ----- JSON persistence ----------------------------------------------
 
@@ -244,14 +238,21 @@ class SemanticSegmenter:
         except (json.JSONDecodeError, OSError):
             return []
 
-    def _append_chunk(self, project_name: str, record: SemanticRecord) -> None:
+    def _save_chunks(self, project_name: str, chunks: list[dict[str, Any]]) -> None:
         path = self._chunks_json_path(project_name)
-        existing = self._load_chunks(project_name)
-        existing.append(record.to_dict())
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.write_text(json.dumps(chunks, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(path)
+
+    def _init_chunks(self, project_name: str, texts: list[str]) -> list[dict[str, Any]]:
+        """Write initial chunks.json with ``text_keywords: null`` for every chunk.
+
+        Returns the list of chunk dicts.
+        """
+        chunks = [{"original_text": t, "text_keywords": None} for t in texts]
+        self._save_chunks(project_name, chunks)
+        return chunks
 
     # ----- full pipeline -------------------------------------------------
 
@@ -307,7 +308,6 @@ class SemanticSegmenter:
         )
 
         if not chunks:
-            # No text — nothing to process.
             duration = time.monotonic() - started
             logger.info(
                 "Semantic digest finished (no chunks): project=%s duration=%.3fs",
@@ -322,11 +322,15 @@ class SemanticSegmenter:
                 "total_words": total_words,
             }
 
-        # Determine where to resume: count already-persisted records.
         existing = self._load_chunks(project_name)
         resume_index = len(existing)
 
-        total_keywords = sum(len(r.get("text_keywords", [])) for r in existing)
+        # Initialize chunks if first time
+        if resume_index == 0:
+            self._init_chunks(project_name, [c[0] for c in chunks])
+            resume_index = 0
+
+        total_keywords = 0
 
         for i in range(resume_index, len(chunks)):
             chunk_text, start_word, end_word = chunks[i]
@@ -335,8 +339,10 @@ class SemanticSegmenter:
                 i + 1, len(chunks), start_word, end_word,
             )
 
+            all_chunks = self._load_chunks(project_name)
+
             try:
-                grouped_text, keywords = self.process_chunk(chunk_text, model)
+                keywords = self.extract_keywords(chunk_text, model)
             except Exception as exc:
                 logger.error(
                     "Chunk %d/%d failed for project %s: %s: %s",
@@ -345,15 +351,15 @@ class SemanticSegmenter:
                 )
                 raise
 
-            record = SemanticRecord(
-                original_text=grouped_text,
-                text_keywords=keywords,
-                last_index=end_word,
-            )
-            self._append_chunk(project_name, record)
-            total_keywords += len(keywords)
+            if not keywords:
+                all_chunks[i]["text_keywords"] = None
+            else:
+                all_chunks[i]["text_keywords"] = keywords
 
-            progress_pct = int((end_word / total_words) * 100) if total_words > 0 else 100
+            self._save_chunks(project_name, all_chunks)
+            total_keywords += len(keywords) if keywords else 0
+
+            progress_pct = int(((i + 1) / len(chunks)) * 100) if len(chunks) > 0 else 100
             if on_progress:
                 on_progress({
                     "phase": "chunk_done",
@@ -361,7 +367,6 @@ class SemanticSegmenter:
                     "total_chunks": len(chunks),
                     "progress_pct": progress_pct,
                     "keywords_so_far": total_keywords,
-                    "last_index": end_word,
                 })
 
         duration = time.monotonic() - started

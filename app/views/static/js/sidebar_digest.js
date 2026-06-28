@@ -20,8 +20,8 @@
     };
 
     function statusText(p) {
-        const tw = p.digest_total_words || 0;
-        const li = p.digest_last_index || 0;
+        const tc = p.digest_total_chunks || 0;
+        const cp = p.digest_chunks_processed || 0;
         const kw = p.digest_total_keywords || 0;
         switch (p.digest_state) {
             case "complete":
@@ -34,8 +34,8 @@
                 return "cancelled";
             case "processing":
             case "queued":
-                if (tw > 0) {
-                    const pct = Math.min(100, Math.round((li / tw) * 100));
+                if (tc > 0) {
+                    const pct = Math.min(100, Math.round((cp / tc) * 100));
                     return `processing ${pct}%`;
                 }
                 return "processing 0%";

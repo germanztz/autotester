@@ -25,7 +25,6 @@ from app.utils.validators import is_valid_pdf_bytes, safe_project_name
 _DEFAULT_DIGEST_STATE: dict[str, Any] = {
     "state": "queued",
     "total_words": 0,
-    "last_index": 0,
     "total_chunks": 0,
     "chunks_processed": 0,
     "total_keywords": 0,
@@ -60,7 +59,6 @@ class ProjectEntry:
     created_at: float
     digest_state: str = "queued"
     digest_total_words: int = 0
-    digest_last_index: int = 0
     digest_total_chunks: int = 0
     digest_chunks_processed: int = 0
     digest_total_keywords: int = 0
@@ -75,7 +73,6 @@ class ProjectEntry:
             "created_at": self.created_at,
             "digest_state": self.digest_state,
             "digest_total_words": self.digest_total_words,
-            "digest_last_index": self.digest_last_index,
             "digest_total_chunks": self.digest_total_chunks,
             "digest_chunks_processed": self.digest_chunks_processed,
             "digest_total_keywords": self.digest_total_keywords,
@@ -127,7 +124,6 @@ class FileManager:
                     created_at=created,
                     digest_state=digest["state"],
                     digest_total_words=digest["total_words"],
-                    digest_last_index=digest["last_index"],
                     digest_total_chunks=digest["total_chunks"],
                     digest_chunks_processed=digest["chunks_processed"],
                     digest_total_keywords=digest["total_keywords"],

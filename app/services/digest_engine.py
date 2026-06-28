@@ -1,13 +1,7 @@
-"""Digest engine for autotester — chunk-by-chunk semantic segmentation.
+"""Digest engine for autotester — chunk-by-chunk keyword extraction.
 
-Replaces the old page-by-page embedding pipeline. Uses a
-``SemanticSegmenter`` (which talks to a local LLM via Ollama) to
-process one chunk of text at a time and persist results to
-``chunks.json``.
-
-``LazyAIManager`` orchestrates the per-chunk processing and maintains
-the ``digest.json`` state so the supervisor can resume after a crash
-or cancellation.
+Chunks are created programmatically (no LLM), stored in ``chunks.json``,
+then each chunk is sent sequentially to a local LLM for keyword extraction.
 """
 from __future__ import annotations
 
@@ -58,7 +52,6 @@ class DigestSummary:
 _DEFAULT_STATE: dict[str, Any] = {
     "state": "queued",
     "total_words": 0,
-    "last_index": 0,
     "total_chunks": 0,
     "chunks_processed": 0,
     "total_keywords": 0,
@@ -72,10 +65,11 @@ _TERMINAL_STATES = {"complete", "failed"}
 
 
 class LazyAIManager:
-    """Orchestrate one-chunk-at-a-time semantic segmentation for a project.
+    """Orchestrate one-chunk-at-a-time keyword extraction for a project.
 
-    Uses a ``SemanticSegmenter`` for the actual PDF→text→chunk→LLM work.
-    Maintains ``digest.json`` for progress tracking and resume support.
+    Uses a ``SemanticSegmenter`` for PDF→text extraction, programmatic
+    chunking, and LLM keyword extraction. Maintains ``digest.json`` for
+    progress tracking and resume support.
     """
 
     def __init__(self, segmenter: Any, file_manager: Any) -> None:
@@ -121,21 +115,13 @@ class LazyAIManager:
     def ensure_cache(self, project_name: str, pdf_path: Path) -> str:
         """Extract the PDF to ``<project>.txt`` if not already cached.
 
-        Also writes initial digest state (total_words, total_chunks) on first
-        cache creation so that ``needs_digest`` returns the correct answer.
         Returns the full text. Idempotent.
         """
         text = self.segmenter.ensure_text_cache(project_name, pdf_path)
         state = self._load_state(project_name)
-        if not state.get("total_words") and not state.get("total_chunks"):
-            words = text.split()
-            total_words = len(words)
-            chunks = self.segmenter.chunk_text(text)
-            self._persist_state(
-                project_name,
-                total_words=total_words,
-                total_chunks=len(chunks),
-            )
+        if not state.get("total_words"):
+            total_words = len(text.split())
+            self._persist_state(project_name, total_words=total_words)
         return text
 
     def generate_title(self, project_name: str) -> str:
@@ -232,12 +218,18 @@ class LazyAIManager:
         state = self._load_state(project_name)
         if state.get("state") in _TERMINAL_STATES:
             return False
+        if state.get("state") == "complete":
+            return False
         text_cache = self.file_manager.project_path(project_name) / f"{project_name}.txt"
         if not text_cache.exists():
             return True
-        # If all chunks are processed, we are done.
+        chunks_path = self.segmenter._chunks_json_path(project_name)
+        if not chunks_path.exists():
+            return True
         processed = int(state.get("chunks_processed", 0))
         total = int(state.get("total_chunks", 0))
+        if total == 0:
+            return False
         return processed < total
 
     def process_one_chunk(
@@ -247,70 +239,60 @@ class LazyAIManager:
     ) -> Optional[dict[str, Any]]:
         """Process the next unprocessed chunk; return progress info or ``None`` when done.
 
-        On success, updates ``digest.json`` and appends to ``chunks.json``.
-        On Ollama failure, transitions state to ``error`` and re-raises.
+        On first call, creates ``chunks.json`` with all chunks marked
+        ``text_keywords: null`` (programmatic chunking, no LLM). Then
+        sends one chunk at a time to the LLM for keyword extraction.
         """
         state = self._load_state(project_name)
-        if state.get("state") == "failed":
+        if state.get("state") in _TERMINAL_STATES:
             return None
+
+        # Create/update state to processing
+        self._persist_state(project_name, state="processing")
 
         text_cache = self.file_manager.project_path(project_name) / f"{project_name}.txt"
         if not text_cache.exists():
-            # Nothing to do — treat as complete (should not happen in normal flow).
             self._persist_state(project_name, state="complete")
             return None
 
-        text = text_cache.read_text(encoding="utf-8")
-        words = text.split()
-        total_words = len(words)
+        chunks_path = self.segmenter._chunks_json_path(project_name)
 
-        if total_words == 0:
-            self._persist_state(project_name, state="complete", total_words=0)
-            return None
-
-        # Determine which chunk to process next
-        last_index = int(state.get("last_index", 0))
-        if last_index >= total_words:
+        # First time: create initial chunks.json from the cached text
+        if not chunks_path.exists():
+            text = text_cache.read_text(encoding="utf-8")
+            words = text.split()
+            if not words:
+                self._persist_state(project_name, state="complete", total_words=0)
+                return None
+            chunk_tuples = self.segmenter.chunk_text(text)
+            total_chunks = len(chunk_tuples)
+            if total_chunks == 0:
+                self._persist_state(project_name, state="complete", total_words=len(words))
+                return None
+            texts = [c[0] for c in chunk_tuples]
+            self.segmenter._init_chunks(project_name, texts)
             self._persist_state(
                 project_name,
-                state="complete",
-                total_words=total_words,
-            )
-            return None
-
-        chunks = self.segmenter.chunk_text(text)
-        total_chunks = len(chunks)
-
-        # Find the next unprocessed chunk
-        resume_index = 0
-        for i, (_, start, end) in enumerate(chunks):
-            if start == last_index or (start <= last_index < end):
-                resume_index = i + 1 if last_index >= end else i
-                break
-
-        if resume_index >= total_chunks:
-            self._persist_state(
-                project_name,
-                state="complete",
-                total_words=total_words,
+                total_words=len(words),
                 total_chunks=total_chunks,
-                chunks_processed=total_chunks,
+                chunks_processed=0,
             )
+            state = self._load_state(project_name)
+
+        chunks = self.segmenter._load_chunks(project_name)
+        total_chunks = len(chunks)
+        processed = int(state.get("chunks_processed", 0))
+
+        if processed >= total_chunks:
+            self._persist_state(project_name, state="complete")
             return None
 
-        chunk_text, start_word, end_word = chunks[resume_index]
-
-        # Update state to processing
-        self._persist_state(
-            project_name,
-            state="processing",
-            total_words=total_words,
-            total_chunks=total_chunks,
-        )
-        chunk_num = resume_index + 1
+        chunk_data = chunks[processed]
+        chunk_text = chunk_data["original_text"]
+        chunk_num = processed + 1
 
         try:
-            grouped_text, keywords = self.segmenter.process_chunk(
+            keywords = self.segmenter.extract_keywords(
                 chunk_text,
                 model=self.segmenter._get_ia_settings()["ollama_model"],
             )
@@ -324,38 +306,29 @@ class LazyAIManager:
             )
             raise
 
-        # Persist to chunks.json
-        from app.models.semantic_segmenter import SemanticRecord
+        # Update the chunk in chunks.json
+        chunks[processed]["text_keywords"] = keywords if keywords else None
+        self.segmenter._save_chunks(project_name, chunks)
 
-        record = SemanticRecord(
-            original_text=grouped_text,
-            text_keywords=keywords,
-            last_index=end_word,
-        )
-        self.segmenter._append_chunk(project_name, record)
+        current_keywords = int(state.get("total_keywords", 0)) + (len(keywords) if keywords else 0)
+        new_processed = processed + 1
 
-        current_keywords = int(state.get("total_keywords", 0)) + len(keywords)
-        processed = int(state.get("chunks_processed", 0)) + 1
-
-        if processed >= total_chunks:
+        if new_processed >= total_chunks:
             info = {
                 "chunk": chunk_num,
                 "total_chunks": total_chunks,
-                "chunks_processed": processed,
+                "chunks_processed": new_processed,
                 "total_keywords": current_keywords,
-                "last_index": end_word,
                 "state": "complete",
                 "progress_pct": 100,
             }
             self._persist_state(
                 project_name,
                 state="complete",
-                last_index=end_word,
                 total_chunks=total_chunks,
-                chunks_processed=processed,
+                chunks_processed=new_processed,
                 total_keywords=current_keywords,
                 consecutive_failures=0,
-                total_words=total_words,
             )
             if on_progress:
                 on_progress({"phase": "chunk_done", **info})
@@ -364,17 +337,15 @@ class LazyAIManager:
         info = {
             "chunk": chunk_num,
             "total_chunks": total_chunks,
-            "chunks_processed": processed,
+            "chunks_processed": new_processed,
             "total_keywords": current_keywords,
-            "last_index": end_word,
             "state": "processing",
-            "progress_pct": int((end_word / total_words) * 100) if total_words > 0 else 0,
+            "progress_pct": int((new_processed / total_chunks) * 100) if total_chunks > 0 else 0,
         }
         self._persist_state(
             project_name,
-            last_index=end_word,
             total_chunks=total_chunks,
-            chunks_processed=processed,
+            chunks_processed=new_processed,
             total_keywords=current_keywords,
             consecutive_failures=0,
         )
