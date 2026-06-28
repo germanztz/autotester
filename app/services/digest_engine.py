@@ -74,9 +74,10 @@ class LazyAIManager:
     progress tracking and resume support.
     """
 
-    def __init__(self, segmenter: Any, file_manager: Any) -> None:
+    def __init__(self, segmenter: Any, file_manager: Any, game_manager: Any = None) -> None:
         self.segmenter = segmenter
         self.file_manager = file_manager
+        self.game_manager = game_manager
         self._cancel_events: dict[str, threading.Event] = {}
 
     # ----- paths ----------------------------------------------------------
@@ -150,6 +151,45 @@ class LazyAIManager:
             total_words = len(text.split())
             self._persist_state(project_name, total_words=total_words)
         return text
+
+    def ensure_questions_generated(self, project_name: str) -> int:
+        """Generate questions for any processed chunks that are missing them.
+
+        Scans ``digest.json`` for chunks with ``text_keywords`` set, then
+        checks whether the corresponding paragraph in ``game_state.json``
+        already has questions. Generates questions for any that don't.
+
+        Returns the number of paragraphs whose questions were generated.
+
+        This is called at app startup to backfill questions for projects
+        whose digest completed before the question-generation feature
+        was introduced, or after a crash during generation.
+        """
+        if self.game_manager is None:
+            return 0
+
+        chunks = self._load_chunks(project_name)
+        if not chunks:
+            return 0
+
+        state = self.game_manager.load_state(project_name)
+        generated = 0
+
+        for i, chunk in enumerate(chunks):
+            if chunk.get("text_keywords") is None:
+                continue
+            # Check if this paragraph already has questions
+            if state is not None and i < len(state.paragraphs) and state.paragraphs[i].questions:
+                continue
+            self._generate_chunk_questions(project_name, chunk["original_text"], i)
+            generated += 1
+
+        if generated:
+            logger.info(
+                "Generated %d question(s) for %d paragraph(s) of %s",
+                generated, generated, project_name,
+            )
+        return generated
 
     def generate_title(self, project_name: str) -> tuple[str, str]:
         """Generate a project title and detect the document language.
@@ -276,6 +316,48 @@ class LazyAIManager:
             return False
         return processed < total
 
+    def _generate_chunk_questions(self, project_name: str, chunk_text: str, chunk_idx: int) -> None:
+        """Generate the default set of questions for a chunk and store in game_state.json.
+
+        Called after keyword extraction for each chunk. The question(s) are
+        stored in ``game_state.paragraphs[chunk_idx]`` so the user can start
+        playing as soon as the first chunk is done, without waiting for the
+        full document to be processed.
+        """
+        if self.game_manager is None:
+            return
+
+        state = self.game_manager.load_state(project_name)
+        if state is None:
+            # Lazy-init the game state with the total chunk count
+            all_chunks = self._load_chunks(project_name)
+            state = self.game_manager.init_game(project_name, len(all_chunks))
+
+        max_id = 0
+        for para in state.paragraphs:
+            for q in para.questions:
+                if q.id > max_id:
+                    max_id = q.id
+
+        from app.models.game_state import QuestionRecord
+
+        question = QuestionRecord(
+            id=max_id + 1,
+            title="Reading Check",
+            question_type="true_false",
+            question_text=(
+                f"Read the content we are going to study: {chunk_text}. "
+                "Did you read the paragraph?"
+            ),
+            correct_answer="true",
+        )
+        state.paragraphs[chunk_idx].questions = [question]
+        self.game_manager.save_state(project_name, state)
+        logger.debug(
+            "Generated question %d (true_false) for chunk %d of %s",
+            question.id, chunk_idx, project_name,
+        )
+
     def _resolve_page_number(self, word_idx: int, page_ranges: list[tuple[int, int, int]]) -> int:
         """Return the 1-indexed page number containing the given word index."""
         for page_num, start, end in page_ranges:
@@ -372,6 +454,9 @@ class LazyAIManager:
         # Update the chunk in digest.json
         chunks[processed]["text_keywords"] = keywords if keywords else None
         self._save_chunks(project_name, chunks)
+
+        # Generate questions for this chunk so users can start playing ASAP
+        self._generate_chunk_questions(project_name, chunk_text, processed)
 
         current_keywords = int(state.get("total_keywords", 0)) + (len(keywords) if keywords else 0)
         new_processed = processed + 1

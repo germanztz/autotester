@@ -109,6 +109,41 @@ def project_with_pdf(segmenter_and_lazy: dict):
     return entry, pdf_path, segmenter_and_lazy
 
 
+@pytest.fixture
+def segmenter_and_lazy_with_game(tmp_path: Path, fake_llm: _FakeLLM):
+    """Like segmenter_and_lazy but also wires a GameManager."""
+    import yaml
+
+    from app.models.config_manager import ConfigManager
+    from app.models.file_manager import FileManager
+    from app.models.game_state import GameManager
+    from app.models.semantic_segmenter import SemanticSegmenter
+
+    projects_dir = tmp_path / "projects"
+    config_path = tmp_path / "config.yaml"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(yaml.safe_dump({"theme": "system", "app_name": "autotester"}))
+
+    cm = ConfigManager(config_path)
+    fm = FileManager(projects_dir)
+    gm = GameManager(fm, cm)
+    seg = SemanticSegmenter(config_manager=cm, file_manager=fm, llm_client=fake_llm, request_timeout=5.0)
+    lazy = LazyAIManager(segmenter=seg, file_manager=fm, game_manager=gm)
+    return {"cm": cm, "fm": fm, "gm": gm, "seg": seg, "lazy": lazy, "fake": fake_llm}
+
+
+@pytest.fixture
+def project_with_pdf_and_game(segmenter_and_lazy_with_game: dict):
+    """Create a project with PDF + GameManager wired."""
+    fm = segmenter_and_lazy_with_game["fm"]
+    lazy = segmenter_and_lazy_with_game["lazy"]
+    text = "hello " * 60 + "world " * 60 + "test " * 60
+    pdf_bytes = _write_pdf_with_text(text)
+    entry = fm.save_upload(io.BytesIO(pdf_bytes), "doc.pdf", "demo")
+    pdf_path = fm.project_path(entry.name) / "doc.pdf"
+    return entry, pdf_path, segmenter_and_lazy_with_game
+
+
 # ---------------------------------------------------------------------------
 # TestEnsureCache
 # ---------------------------------------------------------------------------
@@ -280,6 +315,181 @@ class TestProcessOneChunk:
         info = lazy.process_one_chunk(entry.name)
         assert info is not None
         assert info["chunk"] >= 3
+
+
+# ---------------------------------------------------------------------------
+# TestGenerateChunkQuestions
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateChunkQuestions:
+    def test_creates_game_state_with_true_false_question(self, project_with_pdf_and_game):
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        assert state is not None
+        assert len(state.paragraphs) > 0
+        assert len(state.paragraphs[0].questions) == 1
+
+        q = state.paragraphs[0].questions[0]
+        assert q.question_type == "true_false"
+        assert q.title == "Reading Check"
+        assert "Did you read the paragraph?" in q.question_text
+        assert q.correct_answer == "true"
+
+    def test_question_has_auto_incrementing_id(self, project_with_pdf_and_game):
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+
+        # Process two chunks
+        lazy.process_one_chunk(entry.name)
+        lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        assert state is not None
+        assert len(state.paragraphs[0].questions) == 1
+        assert len(state.paragraphs[1].questions) == 1
+        assert state.paragraphs[0].questions[0].id == 1
+        assert state.paragraphs[1].questions[0].id == 2
+
+    def test_questions_store_in_correct_paragraphs(self, project_with_pdf_and_game):
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+
+        lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        assert state is not None
+
+        # Paragraph 0 (chunk 0) has a question
+        assert len(state.paragraphs[0].questions) == 1
+        # Paragraph 1 (chunk 1, not processed) has no questions
+        if len(state.paragraphs) > 1:
+            assert len(state.paragraphs[1].questions) == 0
+
+    def test_paragraph_0_is_unlocked(self, project_with_pdf_and_game):
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        assert state is not None
+        assert state.paragraphs[0].unlocked is True
+
+    def test_noop_when_no_game_manager(self, project_with_pdf):
+        """Should not crash when game_manager is None."""
+        entry, pdf_path, components = project_with_pdf
+        lazy = components["lazy"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        info = lazy.process_one_chunk(entry.name)
+        assert info is not None
+        # No game_state.json should exist
+        import json
+        digest_path = components["fm"].project_path(entry.name) / "digest.json"
+        data = json.loads(digest_path.read_text(encoding="utf-8"))
+        assert "game_state" not in data
+
+
+# ---------------------------------------------------------------------------
+# TestEnsureQuestionsGenerated
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureQuestionsGenerated:
+    def test_backfills_missing_questions(self, project_with_pdf_and_game):
+        """Digest completed before gen feature: ensure_questions_generated fills them."""
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+
+        # Run full digest (no game_manager was wired during chunk processing)
+        lazy.game_manager = None
+        lazy.run_to_completion(entry.name)
+        assert gm.load_state(entry.name) is None
+
+        # Re-attach game_manager and backfill
+        lazy.game_manager = gm
+        count = lazy.ensure_questions_generated(entry.name)
+        assert count > 0
+
+        state = gm.load_state(entry.name)
+        assert state is not None
+        total_qs = sum(len(p.questions) for p in state.paragraphs)
+        assert total_qs == count
+
+    def test_skips_already_generated(self, project_with_pdf_and_game):
+        """Calling twice should not create duplicates."""
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+
+        # Process one chunk normally
+        lazy.game_manager = gm
+        lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        assert state is not None
+        first_count = sum(len(p.questions) for p in state.paragraphs)
+
+        # Second call should not add duplicates
+        count = lazy.ensure_questions_generated(entry.name)
+        assert count == 0
+
+        state2 = gm.load_state(entry.name)
+        second_count = sum(len(p.questions) for p in state2.paragraphs)
+        assert second_count == first_count
+
+    def test_noop_for_complete_state(self, project_with_pdf_and_game):
+        """When all chunks have questions, returns 0."""
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+
+        # Let digest generate questions naturally
+        lazy.game_manager = gm
+        lazy.run_to_completion(entry.name)
+
+        count = lazy.ensure_questions_generated(entry.name)
+        assert count == 0
+
+    def test_noop_when_no_game_manager(self, project_with_pdf):
+        entry, pdf_path, components = project_with_pdf
+        lazy = components["lazy"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+        count = lazy.ensure_questions_generated(entry.name)
+        assert count == 0
 
 
 # ---------------------------------------------------------------------------

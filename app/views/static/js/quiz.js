@@ -134,6 +134,17 @@
         document.getElementById("quizNextContainer").classList.remove("d-none");
     }
 
+    function renderWaiting() {
+        var area = document.getElementById("quiz-area");
+        if (!area) return;
+        area.innerHTML =
+            '<div class="text-center py-4">' +
+            '<div class="spinner-border text-info mb-3" role="status">' +
+            '<span class="visually-hidden">Waiting...</span></div>' +
+            '<p class="text-muted">More questions are being generated from your document...</p>' +
+            "</div>";
+    }
+
     function renderComplete(stats) {
         var area = document.getElementById("quiz-area");
         if (!area) return;
@@ -201,6 +212,11 @@
                 pollGameStatus(projectName);
                 return;
             }
+            if (data.status === "waiting") {
+                renderWaiting();
+                pollGameStatus(projectName);
+                return;
+            }
             if (data.question) {
                 renderQuestion(data);
             }
@@ -234,7 +250,14 @@
                 loadNextQuestion(projectName);
                 return;
             }
-            // Still generating — poll again
+            if (data.status === "waiting") {
+                // Digest still processing — keep polling
+                pollTimer = setTimeout(function () {
+                    pollGameStatus(projectName);
+                }, POLL_INTERVAL_MS);
+                return;
+            }
+            // Still generating or other — poll again
             pollTimer = setTimeout(function () {
                 pollGameStatus(projectName);
             }, POLL_INTERVAL_MS);
@@ -269,14 +292,13 @@
                     renderStartingView(projectName, displayName, pct);
                     renderGenerating();
                     pollGameStatus(projectName);
-                } else if (data.status === "playing") {
+                } else if (data.status === "playing" || data.status === "waiting") {
                     renderStartingView(projectName, displayName, pct);
                     loadNextQuestion(projectName);
                 } else if (data.status === "complete") {
                     renderStartingView(projectName, displayName, 100);
                     renderComplete(data);
                 } else {
-                    // Not started or unknown
                     renderStartingView(projectName, displayName, 0);
                 }
             });

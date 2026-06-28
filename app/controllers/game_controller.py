@@ -63,6 +63,8 @@ def next_question(project_name: str):
     result = engine.game_manager.get_next_question(state)
     if result is None:
         stats = engine.game_manager.get_stats(state)
+        if engine.game_manager.has_unprocessed_paragraphs(state):
+            return jsonify({"status": "waiting", **stats}), 200
         return jsonify({"status": "complete", **stats}), 200
 
     para_idx, q_idx, question = result

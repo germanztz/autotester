@@ -69,13 +69,17 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
         max_attempts=int(app.config.get("OLLAMA_MAX_ATTEMPTS", 3)),
         backoff_base=float(app.config.get("OLLAMA_BACKOFF_BASE_SECONDS", 1.0)),
     )
-    lazy_ai_manager = LazyAIManager(segmenter=segmenter, file_manager=file_manager)
+    game_manager = GameManager(file_manager=file_manager, config_manager=config_manager)
+
+    lazy_ai_manager = LazyAIManager(
+        segmenter=segmenter,
+        file_manager=file_manager,
+        game_manager=game_manager,
+    )
     job_runner = JobRunner(
         max_workers=int(app.config.get("JOB_MAX_WORKERS", 2)),
         ttl_seconds=float(app.config.get("JOB_TTL_SECONDS", 60.0)),
     )
-
-    game_manager = GameManager(file_manager=file_manager, config_manager=config_manager)
     question_generator = QuestionGenerator(
         llm_client=segmenter.llm,
         config_manager=config_manager,
@@ -116,6 +120,17 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     get_logger().info("Scanning ./projects/ for unprocessed projects...")
     pending = [e for e in file_manager.list_projects() if lazy_ai_manager.needs_digest(e.name)]
     get_logger().info("Projects pending processing: %d", len(pending))
+
+    # Backfill questions for projects whose digest completed before the
+    # question-generation feature existed, or after a partial crash.
+    for entry in file_manager.list_projects():
+        if entry.digest_state in ("complete", "processing") or lazy_ai_manager.needs_digest(entry.name):
+            count = lazy_ai_manager.ensure_questions_generated(entry.name)
+            if count:
+                get_logger().info(
+                    "Backfilled %d question(s) for %s",
+                    count, entry.name,
+                )
 
     @app.context_processor
     def inject_globals() -> dict:

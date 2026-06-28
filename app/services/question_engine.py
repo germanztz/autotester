@@ -161,4 +161,7 @@ class QuestionEngine:
             return {"status": "generating"}
 
         stats = self.game_manager.get_stats(state)
+        if self.game_manager.has_unprocessed_paragraphs(state):
+            return {"status": "playing", "digest_active": True, **stats}
+
         return {"status": "playing", **stats}

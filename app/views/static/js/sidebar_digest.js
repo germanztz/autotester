@@ -105,8 +105,8 @@
             : "";
         var disp = displayName(p);
         var game_bar = "";
-        if (p.digest_state === "complete") {
-            var gp = Math.min(100, Math.max(0, p.game_progress));
+        var gp = Math.min(100, Math.max(0, p.game_progress));
+        if (gp > 0) {
             game_bar = `<div class="mt-1 small">
                         <div class="d-flex justify-content-between text-muted" style="font-size:0.7rem;">
                             <span>Quiz</span>

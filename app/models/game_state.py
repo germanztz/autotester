@@ -18,6 +18,8 @@ class QuestionRecord:
 
     question_type: str  # multiple_choice | true_false | fill_blank | short_answer
     question_text: str
+    id: int = 0
+    title: str = ""
     options: list[str] = field(default_factory=list)
     correct_answer: str = ""
     correct_count: int = 0
@@ -29,6 +31,8 @@ class QuestionRecord:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "id": self.id,
+            "title": self.title,
             "question_type": self.question_type,
             "question_text": self.question_text,
             "options": self.options,
@@ -41,6 +45,8 @@ class QuestionRecord:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> QuestionRecord:
         return cls(
+            id=data.get("id", 0),
+            title=data.get("title", ""),
             question_type=data["question_type"],
             question_text=data["question_text"],
             options=data.get("options", []),
@@ -144,9 +150,8 @@ class GameManager:
     def calculate_progress(self, state: GameState) -> float:
         """Calculate progress as (total_correct / total_possible) * 100."""
         cfg = self._get_game_config()
-        qpp = cfg.get("questions_per_paragraph", 5)
         ctm = cfg.get("correct_to_master", 3)
-        total_questions = len(state.paragraphs) * qpp
+        total_questions = sum(len(p.questions) for p in state.paragraphs)
         if total_questions == 0:
             return 0.0
         total_possible = total_questions * ctm
@@ -158,9 +163,8 @@ class GameManager:
     def get_stats(self, state: GameState) -> dict[str, Any]:
         """Return progress statistics."""
         cfg = self._get_game_config()
-        qpp = cfg.get("questions_per_paragraph", 5)
         ctm = cfg.get("correct_to_master", 3)
-        total_questions = len(state.paragraphs) * qpp
+        total_questions = sum(len(p.questions) for p in state.paragraphs)
         total_possible = total_questions * ctm if total_questions > 0 else 1
         total_correct = sum(
             q.correct_count for p in state.paragraphs for q in p.questions
@@ -181,6 +185,17 @@ class GameManager:
             "total_paragraphs": len(state.paragraphs),
             "unlocked_paragraphs": sum(1 for p in state.paragraphs if p.unlocked),
         }
+
+    def has_unprocessed_paragraphs(self, state: GameState) -> bool:
+        """Return True if any locked paragraphs have no questions (digest not finished).
+
+        This prevents the frontend from showing a premature 'Congratulations' when
+        the digest hasn't processed all chunks yet.
+        """
+        return any(
+            not para.unlocked and not para.questions
+            for para in state.paragraphs
+        )
 
     def get_next_question(self, state: GameState) -> Optional[tuple[int, int, QuestionRecord]]:
         """Select the next question using spaced repetition logic.

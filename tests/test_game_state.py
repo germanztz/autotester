@@ -146,6 +146,40 @@ class TestQuestionRecord:
         assert q2.correct_count == q.correct_count
         assert q2.wrong_count == q.wrong_count
 
+    def test_to_dict_includes_id_and_title(self):
+        q = QuestionRecord(
+            id=42,
+            title="Reading Check",
+            question_type="true_false",
+            question_text="Did you read?",
+            correct_answer="true",
+        )
+        d = q.to_dict()
+        assert d["id"] == 42
+        assert d["title"] == "Reading Check"
+
+    def test_from_dict_includes_id_and_title(self):
+        data = {
+            "id": 7,
+            "title": "Comprehension",
+            "question_type": "true_false",
+            "question_text": "Read the text?",
+            "correct_answer": "true",
+        }
+        q = QuestionRecord.from_dict(data)
+        assert q.id == 7
+        assert q.title == "Comprehension"
+
+    def test_from_dict_missing_id_title_defaults(self):
+        data = {
+            "question_type": "true_false",
+            "question_text": "test?",
+            "correct_answer": "true",
+        }
+        q = QuestionRecord.from_dict(data)
+        assert q.id == 0
+        assert q.title == ""
+
 
 # ---------------------------------------------------------------------------
 # TestParagraphState
@@ -285,6 +319,61 @@ class TestGetNextQuestion:
             q.correct_count = 2
         result = manager.get_next_question(sample_state)
         assert result is None
+
+
+class TestHasUnprocessedParagraphs:
+    def test_true_when_locked_paragraphs_empty(self, manager: GameManager):
+        state = GameState(
+            project_name="test",
+            paragraphs=[
+                ParagraphState(index=0, unlocked=True, questions=[
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer="true"),
+                ]),
+                ParagraphState(index=1, unlocked=False, questions=[]),
+            ],
+        )
+        assert manager.has_unprocessed_paragraphs(state) is True
+
+    def test_false_when_all_paragraphs_have_questions(self, manager: GameManager):
+        state = GameState(
+            project_name="test",
+            paragraphs=[
+                ParagraphState(index=0, unlocked=True, questions=[
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer="true"),
+                ]),
+                ParagraphState(index=1, unlocked=False, questions=[
+                    QuestionRecord(question_type="true_false", question_text="Q2?", correct_answer="false"),
+                ]),
+            ],
+        )
+        assert manager.has_unprocessed_paragraphs(state) is False
+
+    def test_false_when_all_locked_but_with_questions(self, manager: GameManager):
+        state = GameState(
+            project_name="test",
+            paragraphs=[
+                ParagraphState(index=0, unlocked=False, questions=[
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer="true"),
+                ]),
+                ParagraphState(index=1, unlocked=False, questions=[
+                    QuestionRecord(question_type="true_false", question_text="Q2?", correct_answer="false"),
+                ]),
+            ],
+        )
+        assert manager.has_unprocessed_paragraphs(state) is False
+
+    def test_false_when_all_unlocked_and_answered(self, manager: GameManager):
+        state = GameState(
+            project_name="test",
+            paragraphs=[
+                ParagraphState(index=0, unlocked=True, questions=[
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer="true"),
+                ]),
+                ParagraphState(index=1, unlocked=True, questions=[]),
+            ],
+        )
+        # All unlocked, no locked empty paragraphs → should be False
+        assert manager.has_unprocessed_paragraphs(state) is False
 
 
 class TestSubmitAnswer:
