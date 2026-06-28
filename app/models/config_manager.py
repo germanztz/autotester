@@ -46,8 +46,8 @@ _DEFAULT_TITLE_USER_PROMPT_TPL = (
 IA_DEFAULTS: dict[str, Any] = {
     "ollama_url": "http://localhost:11434",
     "ollama_model": "qwen3.5:latest",
-    "chunk_size": 400,
-    "chunk_overlap": 50,
+    "chunk_size": 100,
+    "chunk_overlap": 10,
     "system_prompt": _DEFAULT_SYSTEM_PROMPT,
     "user_prompt_tpl": _DEFAULT_USER_PROMPT_TPL,
     "title_system_prompt": _DEFAULT_TITLE_SYSTEM_PROMPT,

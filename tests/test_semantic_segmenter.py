@@ -167,8 +167,8 @@ class TestSemanticSegmenter:
         settings = segmenter._get_ia_settings()
         assert settings["ollama_url"] == "http://localhost:11434"
         assert settings["ollama_model"] == "qwen3.5:latest"
-        assert settings["chunk_size"] == 400
-        assert settings["chunk_overlap"] == 50
+        assert settings["chunk_size"] == 100
+        assert settings["chunk_overlap"] == 10
 
     def test_get_ia_settings_uses_persisted_values(
         self, temp_workspace: dict, fake_llm: FakeOllamaChat

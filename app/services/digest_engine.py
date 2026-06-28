@@ -314,11 +314,20 @@ class LazyAIManager:
         new_processed = processed + 1
 
         if new_processed >= total_chunks:
+            # Deduplicate keywords across all chunks for the final count
+            all_chunks = self.segmenter._load_chunks(project_name)
+            unique_kws: set[str] = set()
+            for c in all_chunks:
+                kws = c.get("text_keywords")
+                if kws:
+                    unique_kws.update(kws)
+            unique_count = len(unique_kws)
+
             info = {
                 "chunk": chunk_num,
                 "total_chunks": total_chunks,
                 "chunks_processed": new_processed,
-                "total_keywords": current_keywords,
+                "total_keywords": unique_count,
                 "state": "complete",
                 "progress_pct": 100,
             }
@@ -327,7 +336,7 @@ class LazyAIManager:
                 state="complete",
                 total_chunks=total_chunks,
                 chunks_processed=new_processed,
-                total_keywords=current_keywords,
+                total_keywords=unique_count,
                 consecutive_failures=0,
             )
             if on_progress:

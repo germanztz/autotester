@@ -144,8 +144,8 @@ class SemanticSegmenter:
         defaults = {
             "ollama_url": "http://localhost:11434",
             "ollama_model": "qwen3.5:latest",
-            "chunk_size": 400,
-            "chunk_overlap": 50,
+            "chunk_size": 100,
+            "chunk_overlap": 10,
             "system_prompt": _KEYWORDS_SYSTEM_PROMPT,
             "user_prompt_tpl": _KEYWORDS_USER_PROMPT_TPL,
         }

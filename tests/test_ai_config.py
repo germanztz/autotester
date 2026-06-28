@@ -14,8 +14,8 @@ class TestIaDefaults:
         ia = cfg["ia"]
         assert ia["ollama_url"] == "http://localhost:11434"
         assert ia["ollama_model"] == "qwen3.5:latest"
-        assert ia["chunk_size"] == 400
-        assert ia["chunk_overlap"] == 50
+        assert ia["chunk_size"] == 100
+        assert ia["chunk_overlap"] == 10
         assert "system_prompt" in ia
         assert "user_prompt_tpl" in ia
         assert isinstance(ia["system_prompt"], str) and ia["system_prompt"]
@@ -49,7 +49,7 @@ class TestIaUpdates:
         assert ia["chunk_size"] == 800
         # untouched fields keep their defaults
         assert ia["ollama_model"] == "qwen3.5:latest"
-        assert ia["chunk_overlap"] == 50
+        assert ia["chunk_overlap"] == 10
 
     def test_partial_update_preserves_other_ia_keys(self, temp_workspace: dict):
         mgr = ConfigManager(temp_workspace["config"])
