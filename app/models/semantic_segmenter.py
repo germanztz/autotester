@@ -3,7 +3,7 @@
 Replaces the old RAG/ChromaDB pipeline. Extracts raw text from a PDF,
 splits it into word-based chunks, sends each chunk to a local LLM (via
 Ollama) for concept grouping and keyword extraction, and persists the
-results incrementally to ``<project>_chunks.json``.
+results incrementally to ``chunks.json``.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ logger = get_logger()
 
 @dataclass
 class SemanticRecord:
-    """A single processed chunk stored in ``_chunks.json``."""
+    """A single processed chunk stored in ``chunks.json``."""
 
     original_text: str
     text_keywords: list[str]
@@ -230,7 +230,7 @@ class SemanticSegmenter:
     # ----- JSON persistence ----------------------------------------------
 
     def _chunks_json_path(self, project_name: str) -> Path:
-        return self.file_manager.project_path(project_name) / f"{project_name}_chunks.json"
+        return self.file_manager.project_path(project_name) / "chunks.json"
 
     def _text_cache_path(self, project_name: str) -> Path:
         return self.file_manager.project_path(project_name) / f"{project_name}.txt"
@@ -282,7 +282,7 @@ class SemanticSegmenter:
         1. Extract raw text (or load cached ``.txt``).
         2. Compute total word count.
         3. Chunk text by words.
-        4. For each unprocessed chunk, call LLM and persist to ``_chunks.json``.
+        4. For each unprocessed chunk, call LLM and persist to ``chunks.json``.
 
         Returns a summary dict with ``project_name``, ``total_chunks``,
         ``chunks_processed``, ``total_keywords``, ``duration_seconds``.

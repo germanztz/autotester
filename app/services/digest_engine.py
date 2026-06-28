@@ -3,7 +3,7 @@
 Replaces the old page-by-page embedding pipeline. Uses a
 ``SemanticSegmenter`` (which talks to a local LLM via Ollama) to
 process one chunk of text at a time and persist results to
-``<project>_chunks.json``.
+``chunks.json``.
 
 ``LazyAIManager`` orchestrates the per-chunk processing and maintains
 the ``digest.json`` state so the supervisor can resume after a crash
@@ -247,7 +247,7 @@ class LazyAIManager:
     ) -> Optional[dict[str, Any]]:
         """Process the next unprocessed chunk; return progress info or ``None`` when done.
 
-        On success, updates ``digest.json`` and appends to ``_chunks.json``.
+        On success, updates ``digest.json`` and appends to ``chunks.json``.
         On Ollama failure, transitions state to ``error`` and re-raises.
         """
         state = self._load_state(project_name)
@@ -324,7 +324,7 @@ class LazyAIManager:
             )
             raise
 
-        # Persist to _chunks.json
+        # Persist to chunks.json
         from app.models.semantic_segmenter import SemanticRecord
 
         record = SemanticRecord(
