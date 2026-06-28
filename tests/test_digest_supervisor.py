@@ -37,7 +37,7 @@ class _FakeLLM:
     def is_available(self) -> bool:
         return not self.fail
 
-    def generate(self, model: str, prompt: str, system: str | None = None) -> str:
+    def generate(self, model: str, prompt: str, system: str | None = None, **kwargs: object) -> str:
         self.call_count += 1
         self.calls.append(prompt)
         if self.fail:

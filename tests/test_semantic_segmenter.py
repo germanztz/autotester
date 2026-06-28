@@ -129,7 +129,7 @@ class FakeOllamaChat:
     def warmup(self, model: str) -> bool:
         return not self.fail
 
-    def generate(self, model: str, prompt: str, system: str | None = None) -> str:
+    def generate(self, model: str, prompt: str, system: str | None = None, **kwargs: object) -> str:
         self.calls.append((model, prompt, system))
         if self.fail:
             from app.models.llm_client import OllamaUnavailable

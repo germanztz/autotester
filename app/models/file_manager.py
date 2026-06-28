@@ -29,6 +29,7 @@ _DEFAULT_DIGEST_STATE: dict[str, Any] = {
     "total_chunks": 0,
     "chunks_processed": 0,
     "total_keywords": 0,
+    "title": "",
     "error": None,
 }
 
@@ -63,6 +64,7 @@ class ProjectEntry:
     digest_total_chunks: int = 0
     digest_chunks_processed: int = 0
     digest_total_keywords: int = 0
+    digest_title: str = ""
     digest_error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -77,6 +79,7 @@ class ProjectEntry:
             "digest_total_chunks": self.digest_total_chunks,
             "digest_chunks_processed": self.digest_chunks_processed,
             "digest_total_keywords": self.digest_total_keywords,
+            "digest_title": self.digest_title,
             "digest_error": self.digest_error,
         }
 
@@ -128,6 +131,7 @@ class FileManager:
                     digest_total_chunks=digest["total_chunks"],
                     digest_chunks_processed=digest["chunks_processed"],
                     digest_total_keywords=digest["total_keywords"],
+                    digest_title=digest.get("title", ""),
                     digest_error=digest["error"],
                 )
             )

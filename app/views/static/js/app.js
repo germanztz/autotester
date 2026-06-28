@@ -54,9 +54,29 @@
         });
     }
 
+    function bindUploadTrigger() {
+        var fileInput = document.getElementById("pdfFileInput");
+        var form = document.getElementById("uploadForm");
+        if (!fileInput || !form) return;
+
+        document.body.addEventListener("click", function (e) {
+            var trigger = e.target.closest(".upload-trigger");
+            if (!trigger) return;
+            e.preventDefault();
+            fileInput.click();
+        });
+
+        fileInput.addEventListener("change", function () {
+            if (fileInput.files.length > 0) {
+                form.submit();
+            }
+        });
+    }
+
     document.addEventListener("DOMContentLoaded", function () {
         initTheme();
         bindRenameModal();
         bindThemeRadios();
+        bindUploadTrigger();
     });
 })();

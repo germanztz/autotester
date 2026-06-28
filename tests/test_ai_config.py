@@ -21,6 +21,11 @@ class TestIaDefaults:
         assert isinstance(ia["system_prompt"], str) and ia["system_prompt"]
         assert isinstance(ia["user_prompt_tpl"], str) and ia["user_prompt_tpl"]
         assert "{text}" in ia["user_prompt_tpl"]
+        assert "title_system_prompt" in ia
+        assert "title_user_prompt_tpl" in ia
+        assert isinstance(ia["title_system_prompt"], str) and ia["title_system_prompt"]
+        assert isinstance(ia["title_user_prompt_tpl"], str) and ia["title_user_prompt_tpl"]
+        assert "{text}" in ia["title_user_prompt_tpl"]
 
     def test_ia_defaults_constant_exports_expected_keys(self):
         assert set(IA_DEFAULTS.keys()) == {
@@ -30,6 +35,8 @@ class TestIaDefaults:
             "chunk_overlap",
             "system_prompt",
             "user_prompt_tpl",
+            "title_system_prompt",
+            "title_user_prompt_tpl",
         }
 
 

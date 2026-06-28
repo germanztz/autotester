@@ -27,7 +27,7 @@ class _FakeLLM:
     def is_available(self) -> bool:
         return not self.fail
 
-    def generate(self, model: str, prompt: str, system: str | None = None) -> str:
+    def generate(self, model: str, prompt: str, system: str | None = None, **kwargs: object) -> str:
         self.call_count += 1
         self.calls.append((model, prompt, system))
         if self.fail:
@@ -138,6 +138,58 @@ class TestEnsureCache:
 
 def _get_lazy(d):
     return d["lazy"]
+
+
+# ---------------------------------------------------------------------------
+# TestGenerateTitle
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateTitle:
+    def test_generates_title(self, segmenter_and_lazy: dict, project_with_pdf):
+        entry, pdf_path, components = project_with_pdf
+        lazy = components["lazy"]
+        # ensure_cache first so the .txt file exists
+        lazy.ensure_cache(entry.name, pdf_path)
+        title = lazy.generate_title(entry.name)
+        assert title != ""
+        # the fake LLM returns text from the prompt — should be non-empty
+        persisted = lazy._load_state(entry.name)
+        assert persisted.get("title") == title
+
+    def test_skips_when_title_exists(self, segmenter_and_lazy: dict, project_with_pdf):
+        entry, pdf_path, components = project_with_pdf
+        lazy = components["lazy"]
+        fake = components["fake"]
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy._persist_state(entry.name, title="existing-title")
+        fake.call_count = 0
+        title = lazy.generate_title(entry.name)
+        assert title == "existing-title"
+        assert fake.call_count == 0  # LLM was not called
+
+    def test_returns_empty_when_no_cache(self, segmenter_and_lazy: dict, project_with_pdf):
+        entry, pdf_path, components = project_with_pdf
+        lazy = components["lazy"]
+        # Don't call ensure_cache — no .txt file exists
+        title = lazy.generate_title(entry.name)
+        assert title == ""
+
+    def test_returns_empty_on_llm_failure(self, segmenter_and_lazy: dict):
+        from tests.test_digest_engine import _FakeLLM
+        lazy = segmenter_and_lazy["lazy"]
+        fm = segmenter_and_lazy["fm"]
+        # Create a project with an LLM that always fails
+        failing_llm = _FakeLLM(fail=True)
+        seg = segmenter_and_lazy["seg"]
+        seg.llm = failing_llm
+        text = "hello world " * 50
+        pdf_bytes = _write_pdf_with_text(text)
+        entry = fm.save_upload(io.BytesIO(pdf_bytes), "doc.pdf", "failtitle")
+        pdf_path = fm.project_path(entry.name) / "doc.pdf"
+        lazy.ensure_cache(entry.name, pdf_path)
+        title = lazy.generate_title(entry.name)
+        assert title == ""
 
 
 # ---------------------------------------------------------------------------

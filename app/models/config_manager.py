@@ -26,9 +26,23 @@ _DEFAULT_USER_PROMPT_TPL = (
     'Analyze the following text chunk. Group related concepts, maintain the '
     'original meaning and coherence, and extract 3-7 keywords that represent '
     'the main topics.\n\n'
+    'IMPORTANT: Never translate the text content or the keywords. They must '
+    'remain in the original document language.\n\n'
     'Text:\n{text}\n\n'
     'Return ONLY valid JSON with exactly these fields (no markdown, no extra text):\n'
     '{{"original_text": "the semantically grouped text", "text_keywords": ["kw1", "kw2", ...]}}'
+)
+
+_DEFAULT_TITLE_SYSTEM_PROMPT = (
+    "You are a helpful assistant that generates concise, descriptive project "
+    "titles from document content. Respond with only the title, no extra text."
+)
+
+_DEFAULT_TITLE_USER_PROMPT_TPL = (
+    "Based on the following text, generate a short title of 1 to 7 words that "
+    "represents the project. The title must be syntactically correct (not a "
+    "single concatenated word) and may include emojis to make it expressive.\n\n"
+    "{text}\n\nTitle:"
 )
 
 IA_DEFAULTS: dict[str, Any] = {
@@ -38,6 +52,8 @@ IA_DEFAULTS: dict[str, Any] = {
     "chunk_overlap": 50,
     "system_prompt": _DEFAULT_SYSTEM_PROMPT,
     "user_prompt_tpl": _DEFAULT_USER_PROMPT_TPL,
+    "title_system_prompt": _DEFAULT_TITLE_SYSTEM_PROMPT,
+    "title_user_prompt_tpl": _DEFAULT_TITLE_USER_PROMPT_TPL,
 }
 
 LOGGING_DEFAULTS: dict[str, Any] = {
@@ -75,6 +91,14 @@ def _validate_ia(ia: dict[str, Any]) -> None:
         raise ValueError("user_prompt_tpl must be a non-empty string")
     if "{text}" not in user_prompt_tpl:
         raise ValueError("user_prompt_tpl must contain the {text} placeholder")
+    title_system_prompt = ia.get("title_system_prompt", "")
+    if not isinstance(title_system_prompt, str) or not title_system_prompt.strip():
+        raise ValueError("title_system_prompt must be a non-empty string")
+    title_user_prompt_tpl = ia.get("title_user_prompt_tpl", "")
+    if not isinstance(title_user_prompt_tpl, str) or not title_user_prompt_tpl.strip():
+        raise ValueError("title_user_prompt_tpl must be a non-empty string")
+    if "{text}" not in title_user_prompt_tpl:
+        raise ValueError("title_user_prompt_tpl must contain the {text} placeholder")
 
 
 def _validate_logging(logging_cfg: dict[str, Any]) -> None:

@@ -63,6 +63,7 @@ _DEFAULT_STATE: dict[str, Any] = {
     "chunks_processed": 0,
     "total_keywords": 0,
     "consecutive_failures": 0,
+    "title": "",
     "error": None,
     "updated_at": 0.0,
 }
@@ -136,6 +137,70 @@ class LazyAIManager:
                 total_chunks=len(chunks),
             )
         return text
+
+    def generate_title(self, project_name: str) -> str:
+        """Generate a project title from the first 100 words of the cached text.
+
+        Uses the LLM with ``title_system_prompt`` and ``title_user_prompt_tpl``
+        from the IA config. Skips if a title was already generated.
+
+        Returns the title or an empty string on failure. Non-fatal — the
+        supervisor continues with chunk processing regardless.
+        """
+        state = self._load_state(project_name)
+        if state.get("title"):
+            return state["title"]
+
+        text_cache = self._project_dir(project_name) / f"{project_name}.txt"
+        if not text_cache.exists():
+            logger.warning("Cannot generate title: no text cache for %s", project_name)
+            return ""
+
+        text = text_cache.read_text(encoding="utf-8")
+        words = text.split()
+        if not words:
+            logger.warning("Cannot generate title: empty text for %s", project_name)
+            return ""
+
+        first_words = " ".join(words[:100])
+        settings = self.segmenter._get_ia_settings()
+        model = settings["ollama_model"]
+        system_prompt = settings.get(
+            "title_system_prompt",
+            "You are a helpful assistant that generates concise, descriptive project titles.",
+        )
+        user_prompt_tpl = settings.get(
+            "title_user_prompt_tpl",
+            "Based on the following text, generate a short title of 1 to 7 words "
+            "that represents the project:\n\n{text}\n\nTitle:",
+        )
+        prompt = user_prompt_tpl.format(text=first_words)
+
+        logger.info(
+            "Title generation started | project=%s model=%s words=%d",
+            project_name, model, len(first_words.split()),
+        )
+        try:
+            raw = self.segmenter.llm.generate(
+                model, prompt, system=system_prompt, format_json=False,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Title generation failed for %s: %s: %s",
+                project_name, type(exc).__name__, exc,
+            )
+            return ""
+
+        title = raw.strip().strip('"').strip("'").strip()
+        if title:
+            self._persist_state(project_name, title=title)
+            logger.info(
+                "Title generation finished | project=%s title=%s",
+                project_name, title,
+            )
+        else:
+            logger.warning("Title generation returned empty for %s", project_name)
+        return title
 
     def project_status(self, project_name: str) -> dict[str, Any]:
         """Return the current digest state for the project.

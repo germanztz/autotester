@@ -77,6 +77,9 @@ def update():
     user_prompt_tpl = request.form.get("user_prompt_tpl")
     if user_prompt_tpl is not None:
         ia_payload["user_prompt_tpl"] = user_prompt_tpl
+    title_user_prompt_tpl = request.form.get("title_user_prompt_tpl")
+    if title_user_prompt_tpl is not None:
+        ia_payload["title_user_prompt_tpl"] = title_user_prompt_tpl
 
     if ia_payload:
         try:

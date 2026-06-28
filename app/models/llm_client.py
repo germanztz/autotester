@@ -147,6 +147,7 @@ class OllamaChatClient:
         model: str,
         prompt: str,
         system: str | None = None,
+        format_json: bool = True,
     ) -> str:
         """Send a chat prompt to the LLM and return the response text.
 
@@ -154,6 +155,7 @@ class OllamaChatClient:
             model: The Ollama model name (e.g. ``qwen3.5:latest``).
             prompt: The user message content.
             system: Optional system message content.
+            format_json: When True, requests JSON-structured output from Ollama.
 
         Returns:
             The assistant's response as a plain string.
@@ -168,23 +170,26 @@ class OllamaChatClient:
 
         total_chars = sum(len(m.get("content", "")) for m in messages)
         logger.info(
-            "Ollama /api/chat | model=%s messages=%d total_chars=%d timeout=%s base_url=%s",
+            "Ollama /api/chat | model=%s messages=%d total_chars=%d timeout=%s base_url=%s format_json=%s",
             model,
             len(messages),
             total_chars,
             self.timeout,
             self.base_url,
+            format_json,
         )
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "think": False,
+        }
+        if format_json:
+            body["format"] = "json"
         response = self._do_with_retry(
             "POST",
             "/api/chat",
-            json={
-                "model": model,
-                "messages": messages,
-                "stream": False,
-                "format": "json",
-                "think": False,
-            },
+            json=body,
         )
         elapsed = response.elapsed.total_seconds() if hasattr(response, "elapsed") else 0
         logger.info(

@@ -278,6 +278,16 @@ class DigestSupervisor:
             self._bump_failure(project_name, reason)
             return {"ok": False, "error": reason, "terminal_failed": False}
 
+        # Generate LLM title (non-fatal — log warning on failure, continue).
+        if not self.lazy_ai_manager.project_status(project_name).get("title"):
+            try:
+                self.lazy_ai_manager.generate_title(project_name)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Title generation failed for %s (continuing): %s: %s",
+                    project_name, type(exc).__name__, exc,
+                )
+
         try:
             logger.info(
                 "Starting semantic segmentation | Document: %s",

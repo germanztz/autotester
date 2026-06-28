@@ -1,15 +1,16 @@
 <aside class="app-sidebar">
     <div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
         <span class="fw-semibold text-uppercase small text-muted">Projects</span>
-        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#uploadModal" title="Open PDF">
+        <button class="btn btn-sm btn-outline-primary upload-trigger" type="button" title="Open PDF">
             <i class="bi bi-plus-lg"></i>
         </button>
     </div>
     {% if projects %}
         <ul class="list-group list-group-flush project-list" id="project-list">
             {% for project in projects %}
-            <li class="list-group-item project-item"
+             <li class="list-group-item project-item"
                 data-project-name="{{ project.name }}"
+                data-digest-title="{{ project.digest_title or project.name }}"
                 data-state="{{ project.digest_state }}">
                 <div class="d-flex align-items-center">
                     {% if project.digest_state == 'complete' %}
@@ -25,8 +26,8 @@
                     {% else %}
                         <i class="bi bi-hourglass-split text-primary me-2"></i>
                     {% endif %}
-                    <div class="flex-grow-1 text-truncate" title="{{ project.name }}">
-                        <div class="fw-semibold text-truncate">{{ project.name }}</div>
+                    <div class="flex-grow-1 text-truncate" title="{{ project.digest_title or project.name }}">
+                        <div class="fw-semibold text-truncate">{{ project.digest_title or project.name }}</div>
                         <div class="small text-muted project-status">
                             {% if project.digest_state == 'complete' %}
                                 {{ project.digest_total_keywords }} keywords

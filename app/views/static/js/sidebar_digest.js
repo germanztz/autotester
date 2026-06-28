@@ -51,6 +51,10 @@
         }[c]));
     }
 
+    function displayName(p) {
+        return p.digest_title || p.name;
+    }
+
     function selectProject(name) {
         if (selectedProject === name) {
             // Toggle off when clicking the same project.
@@ -72,12 +76,16 @@
         document.querySelectorAll(".project-item").forEach(function (el) {
             el.classList.toggle("active", el.dataset.projectName === name);
         });
+        var el = document.querySelector(
+            '#project-list [data-project-name="' + CSS.escape(selectedProject) + '"]'
+        );
+        var display = el ? el.dataset.digestTitle : name;
         document.getElementById("panel-title").innerHTML =
-            '<i class="bi bi-file-earmark-text"></i> ' + escapeHtml(name);
+            '<i class="bi bi-file-earmark-text"></i> ' + escapeHtml(display);
         document.getElementById("panel-content").innerHTML =
             '<div class="card shadow-sm mt-3">' +
             '<div class="card-body">' +
-            '<p class="text-muted mb-0">Project <strong>' + escapeHtml(name) +
+            '<p class="text-muted mb-0">Project <strong>' + escapeHtml(display) +
             "</strong> selected.</p></div></div>";
     }
 
@@ -101,14 +109,16 @@
                     </button>
                 </form>`
             : "";
+        var disp = displayName(p);
         return `
             <li class="list-group-item project-item"
                 data-project-name="${escapeHtml(p.name)}"
+                data-digest-title="${escapeHtml(disp)}"
                 data-state="${escapeHtml(p.digest_state)}">
                 <div class="d-flex align-items-center">
                     <i class="bi ${icon} me-2"></i>
-                    <div class="flex-grow-1 text-truncate" title="${escapeHtml(p.name)}">
-                        <div class="fw-semibold text-truncate">${escapeHtml(p.name)}</div>
+                    <div class="flex-grow-1 text-truncate" title="${escapeHtml(disp)}">
+                        <div class="fw-semibold text-truncate">${escapeHtml(disp)}</div>
                         <div class="small text-muted project-status ${errorClass}">${status}</div>
                     </div>
                     <div class="project-actions">
