@@ -14,17 +14,19 @@ import pytest
 
 
 def _make_project_with_chunks(projects_dir: Path, name: str, num_chunks: int = 2):
-    """Create a project directory with chunks.json (simulating a digested project)."""
+    """Create a project directory with digest.json (simulating a digested project)."""
     proj = projects_dir / name
     proj.mkdir(parents=True, exist_ok=True)
     chunks = [
         {
             "original_text": "Paragraph content for testing. " * 10,
             "text_keywords": ["kw_a", "kw_b"],
+            "page_number": 1,
         }
         for i in range(num_chunks)
     ]
-    (proj / "chunks.json").write_text(json.dumps(chunks), encoding="utf-8")
+    digest = {"state": "complete", "chunks": chunks, "updated_at": 0.0}
+    (proj / "digest.json").write_text(json.dumps(digest), encoding="utf-8")
     return proj
 
 

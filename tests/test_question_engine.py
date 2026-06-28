@@ -78,17 +78,19 @@ def engine(fake_file_manager, fake_config) -> QuestionEngine:
 
 
 def _write_chunks(projects_root: Path, project_name: str, num: int = 2):
-    """Create chunks.json for a project."""
+    """Create digest.json with chunks for a project."""
     proj_dir = projects_root / project_name
     proj_dir.mkdir(parents=True, exist_ok=True)
     chunks = [
         {
             "original_text": f"This is paragraph {i} with some text content for testing purposes.",
             "text_keywords": [f"keyword{i}_a", f"keyword{i}_b"],
+            "page_number": 1,
         }
         for i in range(num)
     ]
-    (proj_dir / "chunks.json").write_text(json.dumps(chunks), encoding="utf-8")
+    digest = {"state": "complete", "chunks": chunks, "updated_at": 0.0}
+    (proj_dir / "digest.json").write_text(json.dumps(digest), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

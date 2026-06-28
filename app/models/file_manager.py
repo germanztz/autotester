@@ -31,6 +31,7 @@ _DEFAULT_DIGEST_STATE: dict[str, Any] = {
     "title": "",
     "language": "",
     "error": None,
+    "updated_at": 0.0,
 }
 
 _GAME_DEFAULTS: dict[str, Any] = {
@@ -96,6 +97,7 @@ class ProjectEntry:
     digest_title: str = ""
     digest_language: str = ""
     digest_error: str | None = None
+    digest_updated_at: float = 0.0
     game_progress: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
@@ -112,6 +114,7 @@ class ProjectEntry:
             "digest_title": self.digest_title,
             "digest_language": self.digest_language,
             "digest_error": self.digest_error,
+            "digest_updated_at": self.digest_updated_at,
             "game_progress": self.game_progress,
         }
 
@@ -166,6 +169,7 @@ class FileManager:
                     digest_title=digest.get("title", ""),
                     digest_language=digest.get("language", ""),
                     digest_error=digest["error"],
+                    digest_updated_at=digest["updated_at"],
                     game_progress=game["progress_pct"],
                 )
             )

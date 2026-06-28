@@ -1,16 +1,15 @@
 """Semantic segmentation engine for autotester.
 
 Splits PDF text into word-based chunks programmatically, sends each chunk
-to a local LLM (via Ollama) for keyword extraction, and persists results
-to ``chunks.json``.
+to a local LLM (via Ollama) for keyword extraction, and returns chunk dicts
+with page numbers. Chunk persistence is handled by the caller (digest.json).
 """
 from __future__ import annotations
 
 import json
-import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from app.utils.logging_setup import get_logger
 
@@ -24,10 +23,11 @@ logger = get_logger()
 
 @dataclass
 class SemanticRecord:
-    """A single processed chunk stored in ``chunks.json``."""
+    """A single processed chunk."""
 
     original_text: str
     text_keywords: list[str] | None
+    page_number: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -172,14 +172,22 @@ class SemanticSegmenter:
 
     def extract_text(self, pdf_path: Path) -> str:
         """Return the full text of a PDF as a single string."""
+        pages = self.extract_text_by_page(pdf_path)
+        return "\n".join(t for _, t in pages)
+
+    def extract_text_by_page(self, pdf_path: Path) -> list[tuple[int, str]]:
+        """Extract PDF text per page.
+
+        Returns a list of ``(page_number_1_indexed, page_text)`` tuples.
+        """
         import fitz
 
         doc = fitz.open(str(pdf_path))
         try:
-            pages = [page.get_text("text") or "" for page in doc]
+            pages = [(i + 1, page.get_text("text") or "") for i, page in enumerate(doc)]
         finally:
             doc.close()
-        return "\n".join(pages)
+        return pages
 
     # ----- chunking ------------------------------------------------------
 
@@ -221,167 +229,58 @@ class SemanticSegmenter:
             )
         return _parse_keywords_response(raw)
 
-    # ----- JSON persistence ----------------------------------------------
+    # ----- page-word boundary helpers ------------------------------------
 
-    def _chunks_json_path(self, project_name: str) -> Path:
-        return self.file_manager.project_path(project_name) / "chunks.json"
+    @staticmethod
+    def _compute_page_word_ranges(pages: list[tuple[int, str]]) -> list[tuple[int, int, int]]:
+        """Build page word ranges from per-page extracted text.
 
-    def _text_cache_path(self, project_name: str) -> Path:
-        return self.file_manager.project_path(project_name) / f"{project_name}.txt"
-
-    def _load_chunks(self, project_name: str) -> list[dict[str, Any]]:
-        path = self._chunks_json_path(project_name)
-        if not path.exists():
-            return []
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return []
-
-    def _save_chunks(self, project_name: str, chunks: list[dict[str, Any]]) -> None:
-        path = self._chunks_json_path(project_name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(chunks, indent=2, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(path)
-
-    def _init_chunks(self, project_name: str, texts: list[str]) -> list[dict[str, Any]]:
-        """Write initial chunks.json with ``text_keywords: null`` for every chunk.
-
-        Returns the list of chunk dicts.
+        Returns ``[(page_num, start_word_index, end_word_index_exclusive), ...]``.
         """
-        chunks = [{"original_text": t, "text_keywords": None} for t in texts]
-        self._save_chunks(project_name, chunks)
+        ranges: list[tuple[int, int, int]] = []
+        offset = 0
+        for page_num, page_text in pages:
+            word_count = len(page_text.split())
+            end = offset + word_count
+            ranges.append((page_num, offset, end))
+            offset = end
+        return ranges
+
+    @staticmethod
+    def _page_number_from_word_index(word_idx: int, page_ranges: list[tuple[int, int, int]]) -> int:
+        """Return the 1-indexed page number containing the given word index."""
+        for page_num, start, end in page_ranges:
+            if start <= word_idx < end:
+                return page_num
+        return page_ranges[-1][0] if page_ranges else 1
+
+    # ----- chunk dict builder -------------------------------------------
+
+    def _build_chunk_dicts(
+        self,
+        texts: list[str],
+        page_numbers: list[int] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Build chunk dicts with ``page_number``.
+
+        Returns ``[{"original_text": ..., "text_keywords": None, "page_number": N}, ...]``.
+        Does NOT write to disk.
+        """
+        chunks: list[dict[str, Any]] = []
+        for i, t in enumerate(texts):
+            chunks.append({
+                "original_text": t,
+                "text_keywords": None,
+                "page_number": page_numbers[i] if page_numbers else None,
+            })
         return chunks
 
     # ----- full pipeline -------------------------------------------------
 
     def ensure_text_cache(self, project_name: str, pdf_path: Path) -> str:
-        """Extract PDF text to ``<project>.txt`` if not already cached.
+        """Extract PDF text and return it.
 
-        Returns the full text. Idempotent.
+        No disk caching. Always re-extracts from the PDF.
+        Returns the full text.
         """
-        cache = self._text_cache_path(project_name)
-        if cache.exists():
-            return cache.read_text(encoding="utf-8")
-        text = self.extract_text(pdf_path)
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        tmp = cache.with_suffix(cache.suffix + ".tmp")
-        tmp.write_text(text, encoding="utf-8")
-        tmp.replace(cache)
-        return text
-
-    def run_pipeline(
-        self,
-        project_name: str,
-        pdf_path: Path,
-        on_progress: Callable[[dict[str, Any]], None] | None = None,
-    ) -> dict[str, Any]:
-        """Run the full semantic segmentation pipeline.
-
-        Steps:
-        1. Extract raw text (or load cached ``.txt``).
-        2. Compute total word count.
-        3. Chunk text by words.
-        4. For each unprocessed chunk, call LLM and persist to ``chunks.json``.
-
-        Returns a summary dict with ``project_name``, ``total_chunks``,
-        ``chunks_processed``, ``total_keywords``, ``duration_seconds``.
-        """
-        settings = self._get_ia_settings()
-        model = settings["ollama_model"]
-
-        logger.info(
-            "Semantic digest started: project=%s pdf=%s model=%s",
-            project_name, pdf_path, model,
-        )
-        started = time.monotonic()
-
-        text = self.ensure_text_cache(project_name, pdf_path)
-        words = text.split()
-        total_words = len(words)
-        chunks = self.chunk_text(text)
-
-        logger.debug(
-            "Extracted %d words, %d chunks from %s",
-            total_words, len(chunks), pdf_path.name,
-        )
-
-        if not chunks:
-            duration = time.monotonic() - started
-            logger.info(
-                "Semantic digest finished (no chunks): project=%s duration=%.3fs",
-                project_name, duration,
-            )
-            return {
-                "project_name": project_name,
-                "total_chunks": 0,
-                "chunks_processed": 0,
-                "total_keywords": 0,
-                "duration_seconds": round(duration, 3),
-                "total_words": total_words,
-            }
-
-        existing = self._load_chunks(project_name)
-        resume_index = len(existing)
-
-        # Initialize chunks if first time
-        if resume_index == 0:
-            self._init_chunks(project_name, [c[0] for c in chunks])
-            resume_index = 0
-
-        total_keywords = 0
-
-        for i in range(resume_index, len(chunks)):
-            chunk_text, start_word, end_word = chunks[i]
-            logger.debug(
-                "Processing chunk %d/%d (words %d-%d)",
-                i + 1, len(chunks), start_word, end_word,
-            )
-
-            all_chunks = self._load_chunks(project_name)
-
-            try:
-                keywords = self.extract_keywords(chunk_text, model)
-            except Exception as exc:
-                logger.error(
-                    "Chunk %d/%d failed for project %s: %s: %s",
-                    i + 1, len(chunks), project_name,
-                    type(exc).__name__, exc,
-                )
-                raise
-
-            if not keywords:
-                all_chunks[i]["text_keywords"] = None
-            else:
-                all_chunks[i]["text_keywords"] = keywords
-
-            self._save_chunks(project_name, all_chunks)
-            total_keywords += len(keywords) if keywords else 0
-
-            progress_pct = int(((i + 1) / len(chunks)) * 100) if len(chunks) > 0 else 100
-            if on_progress:
-                on_progress({
-                    "phase": "chunk_done",
-                    "chunk": i + 1,
-                    "total_chunks": len(chunks),
-                    "progress_pct": progress_pct,
-                    "keywords_so_far": total_keywords,
-                })
-
-        duration = time.monotonic() - started
-        summary = {
-            "project_name": project_name,
-            "total_chunks": len(chunks),
-            "chunks_processed": len(chunks),
-            "total_keywords": total_keywords,
-            "duration_seconds": round(duration, 3),
-            "total_words": total_words,
-        }
-        logger.info(
-            "Semantic digest finished: project=%s chunks=%s keywords=%s duration=%.3fs",
-            project_name, len(chunks), total_keywords, duration,
-        )
-        if on_progress:
-            on_progress({"phase": "done", **summary})
-        return summary
+        return self.extract_text(pdf_path)

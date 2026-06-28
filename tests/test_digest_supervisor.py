@@ -180,15 +180,18 @@ class TestScanOnce:
         assert r1.processed in ("a", "b")
         assert r2.processed in ("a", "b")
 
-    def test_creates_text_cache_on_first_scan(self, ai_components):
+    def test_creates_chunks_on_first_scan(self, ai_components):
         fm = ai_components["fm"]
         pdf_bytes = _make_text_pdf(["hello " * 50, "world " * 50])
         pdf_path = _make_project(fm, "x", pdf_bytes)
 
         sup = _new_supervisor(ai_components)
         result = sup.scan_once()
-        txt_path = pdf_path.parent / "x.txt"
-        assert txt_path.exists()
+        digest_path = pdf_path.parent / "digest.json"
+        assert digest_path.exists()
+        data = json.loads(digest_path.read_text(encoding="utf-8"))
+        assert "chunks" in data
+        assert len(data["chunks"]) > 0
         assert result.processed_ok
 
     def test_resumes_partial_digestion(self, ai_components):

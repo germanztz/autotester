@@ -1,7 +1,8 @@
 """Digest engine for autotester — chunk-by-chunk keyword extraction.
 
-Chunks are created programmatically (no LLM), stored in ``chunks.json``,
-then each chunk is sent sequentially to a local LLM for keyword extraction.
+Chunks are created programmatically (no LLM), stored inside ``digest.json``
+as the ``chunks`` key, then each chunk is sent sequentially to a local LLM
+for keyword extraction.
 """
 from __future__ import annotations
 
@@ -86,39 +87,64 @@ class LazyAIManager:
     def _state_path(self, project_name: str) -> Path:
         return self._project_dir(project_name) / "digest.json"
 
-    # ----- state persistence ---------------------------------------------
+    # ----- state + chunk persistence -------------------------------------
 
-    def _load_state(self, project_name: str) -> dict[str, Any]:
+    def _read_full_state(self, project_name: str) -> dict[str, Any]:
+        """Read the raw digest.json dict (state keys + chunks)."""
         path = self._state_path(project_name)
         if not path.exists():
-            return dict(_DEFAULT_STATE)
+            return {}
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            merged = dict(_DEFAULT_STATE)
-            merged.update({k: v for k, v in data.items() if k in _DEFAULT_STATE})
-            return merged
+            return json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            return dict(_DEFAULT_STATE)
+            return {}
+
+    def _load_state(self, project_name: str) -> dict[str, Any]:
+        data = self._read_full_state(project_name)
+        merged = dict(_DEFAULT_STATE)
+        merged.update({k: v for k, v in data.items() if k in _DEFAULT_STATE})
+        return merged
 
     def _persist_state(self, project_name: str, **fields: Any) -> dict[str, Any]:
-        current = self._load_state(project_name)
-        current.update(fields)
-        current["updated_at"] = time.time()
         path = self._state_path(project_name)
         path.parent.mkdir(parents=True, exist_ok=True)
+        existing = self._read_full_state(project_name)
+        state = dict(_DEFAULT_STATE)
+        state.update({k: v for k, v in existing.items() if k in _DEFAULT_STATE})
+        state.update(fields)
+        state["updated_at"] = time.time()
+        # Preserve non-state keys (e.g. chunks) from the existing file
+        for extra_key in ("chunks",):
+            if extra_key in existing:
+                state[extra_key] = existing[extra_key]
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(current, indent=2), encoding="utf-8")
+        tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(path)
-        return current
+        return state
+
+    def _load_chunks(self, project_name: str) -> list[dict[str, Any]]:
+        data = self._read_full_state(project_name)
+        return data.get("chunks", [])
+
+    def _save_chunks(self, project_name: str, chunks: list[dict[str, Any]]) -> None:
+        path = self._state_path(project_name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = self._read_full_state(project_name)
+        existing["chunks"] = chunks
+        existing["updated_at"] = time.time()
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
 
     # ----- public API -----------------------------------------------------
 
     def ensure_cache(self, project_name: str, pdf_path: Path) -> str:
-        """Extract the PDF to ``<project>.txt`` if not already cached.
+        """Extract PDF text and return it.
 
-        Returns the full text. Idempotent.
+        No disk caching. Always re-extracts from the PDF.
+        Sets ``total_words`` in state on first call.
         """
-        text = self.segmenter.ensure_text_cache(project_name, pdf_path)
+        text = self.segmenter.extract_text(pdf_path)
         state = self._load_state(project_name)
         if not state.get("total_words"):
             total_words = len(text.split())
@@ -139,12 +165,12 @@ class LazyAIManager:
         if state.get("title") and state.get("language"):
             return state["title"], state["language"]
 
-        text_cache = self._project_dir(project_name) / f"{project_name}.txt"
-        if not text_cache.exists():
-            logger.warning("Cannot generate title: no text cache for %s", project_name)
+        pdf_path = self.project_pdf_path(project_name)
+        if pdf_path is None:
+            logger.warning("Cannot generate title: no PDF for %s", project_name)
             return "", ""
 
-        text = text_cache.read_text(encoding="utf-8")
+        text = self.segmenter.extract_text(pdf_path)
         words = text.split()
         if not words:
             logger.warning("Cannot generate title: empty text for %s", project_name)
@@ -240,17 +266,22 @@ class LazyAIManager:
             return False
         if state.get("state") == "complete":
             return False
-        text_cache = self.file_manager.project_path(project_name) / f"{project_name}.txt"
-        if not text_cache.exists():
-            return True
-        chunks_path = self.segmenter._chunks_json_path(project_name)
-        if not chunks_path.exists():
+        chunks = self._load_chunks(project_name)
+        if not chunks:
+            # No chunks yet — pending (first extraction still needed)
             return True
         processed = int(state.get("chunks_processed", 0))
-        total = int(state.get("total_chunks", 0))
+        total = len(chunks)
         if total == 0:
             return False
         return processed < total
+
+    def _resolve_page_number(self, word_idx: int, page_ranges: list[tuple[int, int, int]]) -> int:
+        """Return the 1-indexed page number containing the given word index."""
+        for page_num, start, end in page_ranges:
+            if start <= word_idx < end:
+                return page_num
+        return page_ranges[-1][0] if page_ranges else 1
 
     def process_one_chunk(
         self,
@@ -259,38 +290,50 @@ class LazyAIManager:
     ) -> Optional[dict[str, Any]]:
         """Process the next unprocessed chunk; return progress info or ``None`` when done.
 
-        On first call, creates ``chunks.json`` with all chunks marked
-        ``text_keywords: null`` (programmatic chunking, no LLM). Then
-        sends one chunk at a time to the LLM for keyword extraction.
+        On first call, extracts PDF text per-page, chunks it with page numbers,
+        and stores chunks inside ``digest.json``. Then sends one chunk at a time
+        to the LLM for keyword extraction.
         """
         state = self._load_state(project_name)
         if state.get("state") in _TERMINAL_STATES:
             return None
 
-        # Create/update state to processing
         self._persist_state(project_name, state="processing")
 
-        text_cache = self.file_manager.project_path(project_name) / f"{project_name}.txt"
-        if not text_cache.exists():
-            self._persist_state(project_name, state="complete")
-            return None
+        chunks = self._load_chunks(project_name)
 
-        chunks_path = self.segmenter._chunks_json_path(project_name)
+        # First time: extract text from PDF, chunk it, compute page numbers
+        if not chunks:
+            pdf_path = self.project_pdf_path(project_name)
+            if pdf_path is None:
+                self._persist_state(project_name, state="complete")
+                return None
 
-        # First time: create initial chunks.json from the cached text
-        if not chunks_path.exists():
-            text = text_cache.read_text(encoding="utf-8")
-            words = text.split()
+            pages_text = self.segmenter.extract_text_by_page(pdf_path)
+            if not pages_text or all(not t.strip() for _, t in pages_text):
+                self._persist_state(project_name, state="complete", total_words=0)
+                return None
+
+            page_ranges = self.segmenter._compute_page_word_ranges(pages_text)
+            full_text = "\n".join(t for _, t in pages_text)
+            words = full_text.split()
             if not words:
                 self._persist_state(project_name, state="complete", total_words=0)
                 return None
-            chunk_tuples = self.segmenter.chunk_text(text)
+
+            chunk_tuples = self.segmenter.chunk_text(full_text)
             total_chunks = len(chunk_tuples)
             if total_chunks == 0:
                 self._persist_state(project_name, state="complete", total_words=len(words))
                 return None
+
             texts = [c[0] for c in chunk_tuples]
-            self.segmenter._init_chunks(project_name, texts)
+            page_numbers = [
+                self._resolve_page_number(end - 1, page_ranges)
+                for _, _, end in chunk_tuples
+            ]
+            new_chunks = self.segmenter._build_chunk_dicts(texts, page_numbers)
+            self._save_chunks(project_name, new_chunks)
             self._persist_state(
                 project_name,
                 total_words=len(words),
@@ -298,8 +341,8 @@ class LazyAIManager:
                 chunks_processed=0,
             )
             state = self._load_state(project_name)
+            chunks = new_chunks
 
-        chunks = self.segmenter._load_chunks(project_name)
         total_chunks = len(chunks)
         processed = int(state.get("chunks_processed", 0))
 
@@ -326,16 +369,16 @@ class LazyAIManager:
             )
             raise
 
-        # Update the chunk in chunks.json
+        # Update the chunk in digest.json
         chunks[processed]["text_keywords"] = keywords if keywords else None
-        self.segmenter._save_chunks(project_name, chunks)
+        self._save_chunks(project_name, chunks)
 
         current_keywords = int(state.get("total_keywords", 0)) + (len(keywords) if keywords else 0)
         new_processed = processed + 1
 
         if new_processed >= total_chunks:
             # Deduplicate keywords across all chunks for the final count
-            all_chunks = self.segmenter._load_chunks(project_name)
+            all_chunks = self._load_chunks(project_name)
             unique_kws: set[str] = set()
             for c in all_chunks:
                 kws = c.get("text_keywords")
@@ -373,6 +416,7 @@ class LazyAIManager:
         }
         self._persist_state(
             project_name,
+            state="processing",
             total_chunks=total_chunks,
             chunks_processed=new_processed,
             total_keywords=current_keywords,
@@ -457,8 +501,8 @@ class LazyAIManager:
     def _run_wrapper(self, project_name: str, pdf_path: Path) -> dict[str, Any]:
         """Process a single chunk for the project.
 
-        Called once per supervisor iteration. The ``.txt`` cache is created
-        on first call if missing.
+        Called once per supervisor iteration. The PDF text is extracted
+        on first call if chunks are not yet in ``digest.json``.
         """
         state = self._load_state(project_name)
         if state.get("state") == "failed":

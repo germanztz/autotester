@@ -32,15 +32,19 @@ class QuestionEngine:
         self.generator = question_generator
         self.game_manager = game_manager
 
-    def _chunks_path(self, project_name: str) -> Path:
-        return self.file_manager.project_path(project_name) / "chunks.json"
+    def _digest_path(self, project_name: str) -> Path:
+        return self.file_manager.project_path(project_name) / "digest.json"
 
     def _load_chunks(self, project_name: str) -> list[dict[str, Any]]:
-        """Load chunks from chunks.json."""
-        path = self._chunks_path(project_name)
+        """Load chunks from digest.json."""
+        path = self._digest_path(project_name)
         if not path.exists():
-            raise FileNotFoundError(f"chunks.json not found for {project_name}")
-        return json.loads(path.read_text(encoding="utf-8"))
+            raise FileNotFoundError(f"digest.json not found for {project_name}")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        chunks = data.get("chunks", [])
+        if not chunks:
+            raise FileNotFoundError(f"no chunks in digest.json for {project_name}")
+        return chunks
 
     def start_game(self, project_name: str) -> dict[str, Any]:
         """Initialize game state and optionally generate questions synchronously.

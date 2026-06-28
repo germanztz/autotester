@@ -15,18 +15,19 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def _ensure_chunks(projects_dir: Path, name: str, num_chunks: int = 2):
-    """Write chunks.json if it doesn't exist (empty PDFs produce none)."""
-    chunks_path = projects_dir / name / "chunks.json"
-    if chunks_path.exists():
-        return
+    """Write/overwrite digest.json with proper chunks (empty PDFs produce none)."""
+    proj_dir = projects_dir / name
+    proj_dir.mkdir(parents=True, exist_ok=True)
     chunks = [
         {
             "original_text": "Paragraph content for testing. " * 10,
             "text_keywords": ["kw_a", "kw_b"],
+            "page_number": 1,
         }
         for _ in range(num_chunks)
     ]
-    chunks_path.write_text(json.dumps(chunks), encoding="utf-8")
+    digest = {"state": "complete", "chunks": chunks, "updated_at": 0.0}
+    (proj_dir / "digest.json").write_text(json.dumps(digest), encoding="utf-8")
 
 
 def _fake_questions_llm(*args, **kwargs):

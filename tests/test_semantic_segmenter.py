@@ -247,7 +247,7 @@ class TestSemanticSegmenter:
         assert isinstance(keywords, list)
         assert len(keywords) >= 1
 
-    def test_ensure_text_cache_creates_txt(self, segmenter: SemanticSegmenter, tmp_path: Path):
+    def test_ensure_text_cache_returns_text(self, segmenter: SemanticSegmenter, tmp_path: Path):
         import fitz
 
         doc = fitz.open()
@@ -265,43 +265,75 @@ class TestSemanticSegmenter:
         segmenter.file_manager = fm
         text = segmenter.ensure_text_cache("testproj", pdf_path)
         assert "cached text content" in text
-        cache = fm.project_path("testproj") / "testproj.txt"
-        assert cache.exists()
 
-    def test_ensure_text_cache_idempotent(self, segmenter: SemanticSegmenter, tmp_path: Path):
+    def test_ensure_text_cache_re_extracts(self, segmenter: SemanticSegmenter, tmp_path: Path):
+        import fitz
+
+        doc = fitz.open()
+        page = doc.new_page(width=612, height=792)
+        page.insert_text((72, 72), "hello world")
+        buf = io.BytesIO()
+        doc.save(buf)
+        doc.close()
+
         from app.models.file_manager import FileManager
 
+        pdf_path = tmp_path / "test.pdf"
+        pdf_path.write_bytes(buf.getvalue())
         fm = FileManager(tmp_path / "projects")
         segmenter.file_manager = fm
-        cache = fm.project_path("testproj") / "testproj.txt"
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        cache.write_text("existing content", encoding="utf-8")
-        text = segmenter.ensure_text_cache("testproj", tmp_path / "ghost.pdf")
-        assert text == "existing content"
+        text = segmenter.ensure_text_cache("testproj", pdf_path)
+        assert "hello world" in text
 
-    def test_init_chunks_writes_json(self, segmenter: SemanticSegmenter, tmp_path: Path):
+    def test_build_chunk_dicts(self, segmenter: SemanticSegmenter, tmp_path: Path):
         from app.models.file_manager import FileManager
 
         fm = FileManager(tmp_path / "projects")
         segmenter.file_manager = fm
         texts = ["chunk one text", "chunk two text", "chunk three text"]
-        chunks = segmenter._init_chunks("testproj", texts)
+        chunks = segmenter._build_chunk_dicts(texts)
         assert len(chunks) == 3
         assert chunks[0]["original_text"] == "chunk one text"
         assert chunks[0]["text_keywords"] is None
-        path = segmenter._chunks_json_path("testproj")
-        assert path.exists()
+        assert chunks[0]["page_number"] is None
 
-    def test_save_and_load_chunks(self, segmenter: SemanticSegmenter, tmp_path: Path):
-        from app.models.file_manager import FileManager
+    def test_build_chunk_dicts_with_page_numbers(self, segmenter: SemanticSegmenter):
+        texts = ["first chunk", "second chunk"]
+        pnums = [1, 3]
+        chunks = segmenter._build_chunk_dicts(texts, pnums)
+        assert chunks[0]["page_number"] == 1
+        assert chunks[1]["page_number"] == 3
 
-        fm = FileManager(tmp_path / "projects")
-        segmenter.file_manager = fm
-        chunks = [{"original_text": "hello", "text_keywords": None}]
-        segmenter._save_chunks("testproj", chunks)
-        loaded = segmenter._load_chunks("testproj")
-        assert loaded == chunks
-        loaded[0]["text_keywords"] = ["kw"]
-        segmenter._save_chunks("testproj", loaded)
-        reloaded = segmenter._load_chunks("testproj")
-        assert reloaded[0]["text_keywords"] == ["kw"]
+    def test_extract_text_by_page(self, segmenter: SemanticSegmenter, tmp_path: Path):
+        import fitz
+
+        doc = fitz.open()
+        page1 = doc.new_page(width=612, height=792)
+        page1.insert_text((72, 72), "page one text")
+        page2 = doc.new_page(width=612, height=792)
+        page2.insert_text((72, 72), "page two content")
+        buf = io.BytesIO()
+        doc.save(buf)
+        doc.close()
+
+        pdf_path = tmp_path / "test.pdf"
+        pdf_path.write_bytes(buf.getvalue())
+        pages = segmenter.extract_text_by_page(pdf_path)
+        assert len(pages) == 2
+        assert pages[0][0] == 1
+        assert "page one" in pages[0][1]
+        assert pages[1][0] == 2
+        assert "page two" in pages[1][1]
+
+    def test_compute_page_word_ranges(self):
+        pages = [(1, "hello world"), (2, "foo bar baz")]
+        ranges = SemanticSegmenter._compute_page_word_ranges(pages)
+        assert ranges == [(1, 0, 2), (2, 2, 5)]
+
+    def test_page_number_from_word_index(self):
+        ranges = [(1, 0, 10), (2, 10, 25), (3, 25, 40)]
+        assert SemanticSegmenter._page_number_from_word_index(0, ranges) == 1
+        assert SemanticSegmenter._page_number_from_word_index(9, ranges) == 1
+        assert SemanticSegmenter._page_number_from_word_index(10, ranges) == 2
+        assert SemanticSegmenter._page_number_from_word_index(24, ranges) == 2
+        assert SemanticSegmenter._page_number_from_word_index(25, ranges) == 3

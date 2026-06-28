@@ -115,7 +115,7 @@ def project_with_pdf(segmenter_and_lazy: dict):
 
 
 class TestEnsureCache:
-    def test_creates_txt_with_text(self, segmenter_and_lazy: dict):
+    def test_extracts_text_from_pdf(self, segmenter_and_lazy: dict):
         lazy = segmenter_and_lazy["lazy"]
         fm = segmenter_and_lazy["fm"]
         text = "alpha " * 40 + "beta " * 40
@@ -125,8 +125,6 @@ class TestEnsureCache:
         cached = lazy.ensure_cache(entry.name, pdf_path)
         assert "alpha" in cached
         assert "beta" in cached
-        cache_path = fm.project_path(entry.name) / f"{entry.name}.txt"
-        assert cache_path.exists()
 
     def test_idempotent(self, segmenter_and_lazy: dict, project_with_pdf):
         entry, pdf_path, _ = project_with_pdf
@@ -169,9 +167,12 @@ class TestGenerateTitle:
         assert language == "fr"
         assert fake.call_count == 0
 
-    def test_returns_empty_when_no_cache(self, segmenter_and_lazy: dict, project_with_pdf):
-        entry, pdf_path, components = project_with_pdf
-        lazy = components["lazy"]
+    def test_returns_empty_when_no_text(self, segmenter_and_lazy: dict):
+        lazy = segmenter_and_lazy["lazy"]
+        fm = segmenter_and_lazy["fm"]
+        # Upload a blank PDF (no extractable text)
+        pdf_bytes = _write_pdf_with_text("")
+        entry = fm.save_upload(io.BytesIO(pdf_bytes), "doc.pdf", "emptyproj")
         title, language = lazy.generate_title(entry.name)
         assert title == ""
         assert language == ""
@@ -210,20 +211,22 @@ class TestProcessOneChunk:
         assert info["chunk"] == 1
         assert info["state"] in ("processing", "complete")
 
-    def test_persists_chunks_json(self, project_with_pdf):
+    def test_persists_chunks_in_digest_json(self, project_with_pdf):
         entry, pdf_path, components = project_with_pdf
         lazy = components["lazy"]
         seg = components["seg"]
         seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
         lazy.ensure_cache(entry.name, pdf_path)
         lazy.process_one_chunk(entry.name)
-        chunks_path = components["fm"].project_path(entry.name) / "chunks.json"
-        assert chunks_path.exists()
-        data = json.loads(chunks_path.read_text(encoding="utf-8"))
-        assert len(data) >= 1
-        assert "original_text" in data[0]
+        digest_path = components["fm"].project_path(entry.name) / "digest.json"
+        assert digest_path.exists()
+        data = json.loads(digest_path.read_text(encoding="utf-8"))
+        chunks = data.get("chunks", [])
+        assert len(chunks) >= 1
+        assert "original_text" in chunks[0]
+        assert "page_number" in chunks[0]
         # First chunk should have text_keywords set (list or null)
-        assert data[0]["text_keywords"] is not None
+        assert chunks[0]["text_keywords"] is not None
 
     def test_chunks_initially_have_null_keywords(self, project_with_pdf):
         entry, pdf_path, components = project_with_pdf
@@ -233,12 +236,13 @@ class TestProcessOneChunk:
         lazy.ensure_cache(entry.name, pdf_path)
         # Process one chunk to trigger init
         lazy.process_one_chunk(entry.name)
-        chunks_path = components["fm"].project_path(entry.name) / "chunks.json"
-        data = json.loads(chunks_path.read_text(encoding="utf-8"))
-        assert data[0]["text_keywords"] is not None  # first was processed
+        digest_path = components["fm"].project_path(entry.name) / "digest.json"
+        data = json.loads(digest_path.read_text(encoding="utf-8"))
+        chunks = data.get("chunks", [])
+        assert chunks[0]["text_keywords"] is not None  # first was processed
         # Remaining chunks may exist and are null
-        if len(data) > 1:
-            for c in data[1:]:
+        if len(chunks) > 1:
+            for c in chunks[1:]:
                 assert c["text_keywords"] is None
 
     def test_updates_digest_state(self, project_with_pdf):
