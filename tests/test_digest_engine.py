@@ -217,7 +217,7 @@ class TestProcessOneChunk:
         seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
         lazy.ensure_cache(entry.name, pdf_path)
         lazy.process_one_chunk(entry.name)
-        chunks_path = components["fm"].project_path(entry.name) / f"{entry.name}_chunks.json"
+        chunks_path = components["fm"].project_path(entry.name) / "chunks.json"
         assert chunks_path.exists()
         data = json.loads(chunks_path.read_text(encoding="utf-8"))
         assert len(data) >= 1
