@@ -64,4 +64,10 @@
 
 ### #020 — Tests de integración del flujo completo
 - **Descripción:** Tests E2E: upload → digerir → jugar → progresar → completar → reset.
-- **Prioridad:** 🟢 Baja
+- **Subtareas:**
+  - [x] `test_upload_digest_start_game` — upload, digest, start game, generate questions
+  - [x] `test_correct_answer_increases_progress` — responder correcta → progreso sube
+  - [x] `test_wrong_answer_does_not_increase_progress` — responder incorrecta → no sube
+  - [x] `test_unlock_next_paragraph` — todas correctas en para 0 → para 1 desbloqueado
+  - [x] `test_reset_game` — reset → progreso a 0, correct_counts a 0
+- **Prioridad:** 🟢 Baja ✅
