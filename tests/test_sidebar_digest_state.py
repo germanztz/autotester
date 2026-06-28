@@ -111,3 +111,51 @@ class TestListProjectsWithDigestState:
 
         entries = fm.list_projects()
         assert entries[0].digest_state == "queued"
+
+    def test_game_progress_defaults_to_zero(self, temp_workspace):
+        fm = FileManager(temp_workspace["projects"])
+        proj = temp_workspace["projects"] / "nogame"
+        proj.mkdir()
+        (proj / "x.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
+        _write_state(proj, state="complete")
+
+        entries = fm.list_projects()
+        assert entries[0].game_progress == 0.0
+
+    def test_game_progress_read_from_game_state(self, temp_workspace):
+        fm = FileManager(temp_workspace["projects"])
+        proj = temp_workspace["projects"] / "withgame"
+        proj.mkdir()
+        (proj / "x.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
+        _write_state(proj, state="complete")
+        game_state = {
+            "project_name": "withgame",
+            "paragraphs": [
+                {
+                    "index": 0,
+                    "unlocked": True,
+                    "questions": [
+                        {"correct_count": 3, "wrong_count": 0, "question_type": "multiple_choice",
+                         "question_text": "q", "correct_answer": "a"},
+                    ],
+                },
+            ],
+            "updated_at": 1000.0,
+        }
+        (proj / "game_state.json").write_text(json.dumps(game_state), encoding="utf-8")
+
+        entries = fm.list_projects()
+        assert entries[0].game_progress > 0
+        assert entries[0].game_progress <= 100.0
+
+    def test_game_progress_from_dict_includes_field(self, temp_workspace):
+        fm = FileManager(temp_workspace["projects"])
+        proj = temp_workspace["projects"] / "gamedict"
+        proj.mkdir()
+        (proj / "x.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
+        _write_state(proj, state="complete")
+
+        entries = fm.list_projects()
+        d = entries[0].to_dict()
+        assert "game_progress" in d
+        assert d["game_progress"] == 0.0

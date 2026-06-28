@@ -33,6 +33,11 @@ _DEFAULT_DIGEST_STATE: dict[str, Any] = {
     "error": None,
 }
 
+_GAME_DEFAULTS: dict[str, Any] = {
+    "progress_pct": 0.0,
+    "paragraphs": [],
+}
+
 
 def _load_digest_state(project_dir: Path) -> dict[str, Any]:
     """Read ``digest.json`` and merge with defaults. Returns queued on error."""
@@ -48,6 +53,31 @@ def _load_digest_state(project_dir: Path) -> dict[str, Any]:
         return merged
     except (json.JSONDecodeError, OSError):
         return dict(_DEFAULT_DIGEST_STATE)
+
+
+def _load_game_state(project_dir: Path) -> dict[str, Any]:
+    """Read ``game_state.json`` and return progress + state info."""
+    state_path = project_dir / "game_state.json"
+    if not state_path.exists():
+        return dict(_GAME_DEFAULTS)
+    try:
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return dict(_GAME_DEFAULTS)
+        paragraphs = data.get("paragraphs", [])
+        total_questions = sum(len(p.get("questions", [])) for p in paragraphs)
+        total_correct = sum(
+            q.get("correct_count", 0) for p in paragraphs for q in p.get("questions", [])
+        )
+        total_possible = total_questions * 3  # correct_to_master default
+        progress_pct = round((total_correct / total_possible) * 100, 1) if total_possible > 0 else 0.0
+        unlocked_count = sum(1 for p in paragraphs if p.get("unlocked", False))
+        return {
+            "progress_pct": min(100.0, progress_pct),
+            "paragraphs": paragraphs,
+        }
+    except (json.JSONDecodeError, OSError):
+        return dict(_GAME_DEFAULTS)
 
 
 @dataclass
@@ -66,6 +96,7 @@ class ProjectEntry:
     digest_title: str = ""
     digest_language: str = ""
     digest_error: str | None = None
+    game_progress: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +112,7 @@ class ProjectEntry:
             "digest_title": self.digest_title,
             "digest_language": self.digest_language,
             "digest_error": self.digest_error,
+            "game_progress": self.game_progress,
         }
 
 
@@ -119,6 +151,7 @@ class FileManager:
             size = sum((p.stat().st_size for p in pdfs), 0)
             created = path.stat().st_ctime
             digest = _load_digest_state(path)
+            game = _load_game_state(path)
             entries.append(
                 ProjectEntry(
                     name=path.name,
@@ -133,6 +166,7 @@ class FileManager:
                     digest_title=digest.get("title", ""),
                     digest_language=digest.get("language", ""),
                     digest_error=digest["error"],
+                    game_progress=game["progress_pct"],
                 )
             )
         return entries

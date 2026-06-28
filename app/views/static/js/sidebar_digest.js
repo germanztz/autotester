@@ -105,6 +105,21 @@
             : "";
         var disp = displayName(p);
         return `
+            var game_bar = "";
+            if (p.digest_state === "complete") {
+                var gp = Math.min(100, Math.max(0, p.game_progress));
+                game_bar = `
+                    <div class="mt-1 small">
+                        <div class="d-flex justify-content-between text-muted" style="font-size:0.7rem;">
+                            <span>Quiz</span>
+                            <span>${gp.toFixed(gp === Math.round(gp) ? 0 : 1)}%</span>
+                        </div>
+                        <div class="progress" style="height:4px;">
+                            <div class="progress-bar bg-info" role="progressbar" style="width:${gp}%"></div>
+                        </div>
+                    </div>`;
+            }
+            return `
             <li class="list-group-item project-item"
                 data-project-name="${escapeHtml(p.name)}"
                 data-digest-title="${escapeHtml(disp)}"
@@ -114,6 +129,7 @@
                     <div class="flex-grow-1 text-truncate" title="${escapeHtml(disp)}">
                         <div class="fw-semibold text-truncate">${escapeHtml(disp)}</div>
                         <div class="small text-muted project-status ${errorClass}">${status}</div>
+                        ${game_bar}
                     </div>
                     <div class="project-actions">
                         ${stopForm}

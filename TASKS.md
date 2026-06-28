@@ -54,8 +54,13 @@
 ## 📋 Backlog — Pendiente
 
 ### #019 — Sidebar: indicador de estado de juego
-- **Descripción:** Mostrar progreso del juego en el sidebar junto a cada proyecto (barra pequeña o porcentaje).
-- **Prioridad:** 🟢 Baja
+- **Descripción:** Barra de progreso del Quiz visible en el sidebar para proyectos con digest completado.
+- **Subtareas:**
+  - [x] Campo `game_progress` en `ProjectEntry` leído de `game_state.json`
+  - [x] Barra de progreso en `sidebar_digest.js` al lado del nombre del proyecto
+  - [x] Incluido en respuesta `/ai/projects` via `to_dict()`
+  - [x] 3 tests: valor default, lectura de game_state, inclusión en to_dict
+- **Prioridad:** 🟢 Baja ✅
 
 ### #020 — Tests de integración del flujo completo
 - **Descripción:** Tests E2E: upload → digerir → jugar → progresar → completar → reset.
