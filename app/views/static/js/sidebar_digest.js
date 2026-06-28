@@ -6,6 +6,9 @@
 
     let pollTimer = null;
     let selectedProject = null;
+    let lastProjectsJson = "";
+
+    const TERMINAL_STATES = new Set(["complete", "failed", "cancelled"]);
 
     const STATE_ICONS = {
         queued: "bi-hourglass-split text-primary",
@@ -143,6 +146,9 @@
     function renderAll(projects) {
         const list = document.getElementById("project-list");
         if (!list) return;
+        var json = JSON.stringify(projects);
+        if (json === lastProjectsJson) return;
+        lastProjectsJson = json;
         list.innerHTML = projects.map(renderRow).join("");
         restoreSelection();
     }
@@ -153,11 +159,15 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
             renderAll(data.projects || []);
-            // Always poll at 1 Hz so the user immediately sees supervisor
-            // picks (queued/errored → processing) and the new status text.
-            pollTimer = setTimeout(tick, POLL_INTERVAL_MS);
+            var needsPoll = (data.projects || []).some(function (p) {
+                return !TERMINAL_STATES.has(p.digest_state);
+            });
+            if (needsPoll) {
+                pollTimer = setTimeout(tick, POLL_INTERVAL_MS);
+            } else {
+                pollTimer = null;
+            }
         } catch (err) {
-            // Network blip — back off and retry.
             pollTimer = setTimeout(tick, POLL_INTERVAL_ERROR_MS);
         }
     }
