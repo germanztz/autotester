@@ -156,6 +156,53 @@
         );
     }
 
+    // ----- History reconstruction -----
+
+    function renderHistoryItem(item) {
+        addBubble("bot", "<strong>" + escapeHtml(item.question_text) + "</strong>");
+        addBubble("user", escapeHtml(item.last_answer));
+        var cls = item.last_answer_correct ? "correct" : "incorrect";
+        var icon = item.last_answer_correct ? "bi-check-circle-fill" : "bi-x-circle-fill";
+        var msg = item.last_answer_correct
+            ? "Correct!"
+            : "Incorrect. Correct answer: " + escapeHtml(item.correct_answer);
+        var bubble = addBubble("feedback", '<i class="bi ' + icon + ' feedback-icon"></i> ' + msg);
+        if (bubble) bubble.classList.add(cls);
+    }
+
+    function loadHistoryAndResume(projectName, displayName, statusData) {
+        apiCall("GET", "/game/" + encodeURIComponent(projectName) + "/history", null, function (hdata) {
+            var history = hdata.history || [];
+            if (history.length > 0) {
+                history.forEach(function (item) {
+                    renderHistoryItem(item);
+                });
+                if (statusData.total_questions > 0) {
+                    addBubble("bot",
+                        'Resuming &mdash; you\'ve answered <strong>' +
+                        (statusData.total_correct || 0) + "/" + (statusData.total_possible || 0) +
+                        "</strong> (" + Math.round(statusData.progress_pct || 0) + "%), " +
+                        (statusData.mastered_questions || 0) + " mastered."
+                    );
+                }
+            } else {
+                if (statusData.total_questions > 0) {
+                    addBubble("bot",
+                        'Resuming &mdash; you\'ve answered <strong>' +
+                        (statusData.total_correct || 0) + "/" + (statusData.total_possible || 0) +
+                        "</strong> (" + Math.round(statusData.progress_pct || 0) + "%), " +
+                        (statusData.mastered_questions || 0) + " mastered."
+                    );
+                }
+            }
+            if (statusData.status === "complete") {
+                renderCompleteContent(statusData);
+            } else {
+                loadNextQuestion(projectName);
+            }
+        });
+    }
+
     // ----- Question / Answer flow -----
 
     function renderQuestion(q) {
@@ -312,17 +359,9 @@
                     showTyping();
                     pollGameStatus(projectName);
                 } else if (data.status === "playing" || data.status === "waiting") {
-                    if (data.total_questions > 0) {
-                        addBubble("bot",
-                            'Resuming &mdash; you\'ve answered <strong>' +
-                            (data.total_correct || 0) + "/" + (data.total_possible || 0) +
-                            "</strong> (" + Math.round(data.progress_pct || 0) + "%), " +
-                            (data.mastered_questions || 0) + " mastered."
-                        );
-                    }
-                    loadNextQuestion(projectName);
+                    loadHistoryAndResume(projectName, displayName, data);
                 } else if (data.status === "complete") {
-                    renderCompleteContent(data);
+                    loadHistoryAndResume(projectName, displayName, data);
                 } else {
                     renderStartView(projectName, displayName);
                 }

@@ -108,6 +108,18 @@ def answer(project_name: str):
         return jsonify({"error": str(exc)}), 400
 
 
+@game_bp.route("/<project_name>/history", methods=["GET"])
+def history(project_name: str):
+    """Return the last 10 answered questions for chat reconstruction."""
+    engine = _get_engine()
+    state = engine.game_manager.load_state(project_name)
+    if state is None:
+        return jsonify({"history": []}), 200
+
+    entries = engine.game_manager.get_history(state, count=10)
+    return jsonify({"history": entries}), 200
+
+
 @game_bp.route("/<project_name>/reset", methods=["POST"])
 def reset(project_name: str):
     """Reset game progress for a project."""

@@ -164,3 +164,48 @@ class TestReset:
         _make_project_with_chunks(temp_workspace["projects"], "noreset", 1)
         resp = client.post("/game/noreset/reset")
         assert resp.status_code == 400
+
+
+class TestHistory:
+    @patch("app.models.llm_client.OllamaChatClient.generate", _fake_questions)
+    def test_history_returns_answered_questions(self, client, temp_workspace: dict):
+        _make_project_with_chunks(temp_workspace["projects"], "histproj", 1)
+        client.post("/game/histproj/start")
+
+        from flask import current_app
+        with client.application.app_context():
+            engine = current_app.extensions["question_engine"]
+            engine.generate_paragraph_questions("histproj", 0)
+
+        next_resp = client.get("/game/histproj/next")
+        next_data = next_resp.get_json()
+
+        client.post(
+            "/game/histproj/answer",
+            data=json.dumps({
+                "para_idx": next_data["para_idx"],
+                "q_idx": next_data["q_idx"],
+                "answer": "A",
+            }),
+            content_type="application/json",
+        )
+
+        resp = client.get("/game/histproj/history")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data is not None
+        assert "history" in data
+        assert len(data["history"]) == 1
+        entry = data["history"][0]
+        assert entry["question_text"] == "Test Q?"
+        assert entry["last_answer"] == "A"
+        assert entry["last_answer_correct"] is True
+        assert entry["correct_answer"] == "A"
+
+    def test_history_empty_when_no_game(self, client, temp_workspace: dict):
+        _make_project_with_chunks(temp_workspace["projects"], "nohist", 1)
+        resp = client.get("/game/nohist/history")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data is not None
+        assert data["history"] == []

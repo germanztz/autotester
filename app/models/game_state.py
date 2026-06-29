@@ -25,6 +25,8 @@ class QuestionRecord:
     correct_count: int = 0
     wrong_count: int = 0
     last_seen: float = 0.0
+    last_answer: str = ""
+    last_answer_correct: bool = False
 
     def is_mastered(self, correct_to_master: int) -> bool:
         return self.correct_count >= correct_to_master
@@ -40,6 +42,8 @@ class QuestionRecord:
             "correct_count": self.correct_count,
             "wrong_count": self.wrong_count,
             "last_seen": self.last_seen,
+            "last_answer": self.last_answer,
+            "last_answer_correct": self.last_answer_correct,
         }
 
     @classmethod
@@ -54,6 +58,8 @@ class QuestionRecord:
             correct_count=data.get("correct_count", 0),
             wrong_count=data.get("wrong_count", 0),
             last_seen=data.get("last_seen", 0.0),
+            last_answer=data.get("last_answer", ""),
+            last_answer_correct=data.get("last_answer_correct", False),
         )
 
 
@@ -243,6 +249,8 @@ class GameManager:
         para = state.paragraphs[para_idx]
         q = para.questions[q_idx]
         is_correct = q.correct_answer.strip().lower() == answer.strip().lower()
+        q.last_answer = answer.strip()
+        q.last_answer_correct = is_correct
         if is_correct:
             q.correct_count += 1
         else:
@@ -273,6 +281,31 @@ class GameManager:
             "is_mastered": q.is_mastered(ctm),
             "progress_pct": self.calculate_progress(state),
         }
+
+    def get_history(self, state: GameState, count: int = 10) -> list[dict[str, Any]]:
+        """Return the last `count` answered questions sorted chronologically.
+
+        Each entry contains the question text, the user's last answer,
+        whether it was correct, and the correct answer.
+        """
+        answered = [
+            q for p in state.paragraphs for q in p.questions
+            if q.last_answer
+        ]
+        answered.sort(key=lambda q: q.last_seen, reverse=True)
+        entries = answered[:count]
+        entries.reverse()
+        return [
+            {
+                "question_text": q.question_text,
+                "question_type": q.question_type,
+                "options": q.options,
+                "last_answer": q.last_answer,
+                "last_answer_correct": q.last_answer_correct,
+                "correct_answer": q.correct_answer,
+            }
+            for q in entries
+        ]
 
     def init_game(self, project_name: str, num_paragraphs: int) -> GameState:
         """Create a fresh game state with all paragraphs locked except the first."""
