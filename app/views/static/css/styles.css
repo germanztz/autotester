@@ -65,6 +65,8 @@ body {
 }
 
 #chat-messages {
+    display: flex;
+    flex-direction: column;
     flex: 1 1 auto;
     overflow-y: auto;
     min-height: 0;
@@ -81,7 +83,7 @@ body {
 /* ====== Chat bubbles ====== */
 
 .chat-bubble {
-    max-width: 80%;
+    max-width: 60%;
     margin-bottom: 0.5rem;
     padding: 0.6rem 1rem;
     border-radius: 1rem;
@@ -211,7 +213,7 @@ body {
 
 @media (max-width: 768px) {
     .chat-bubble {
-        max-width: 90%;
+        max-width: 80%;
     }
     .app-shell {
         flex-direction: column;
