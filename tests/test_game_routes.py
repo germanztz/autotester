@@ -209,3 +209,88 @@ class TestHistory:
         data = resp.get_json()
         assert data is not None
         assert data["history"] == []
+
+
+class TestWaitingState:
+    """When all questions are answered but the digest is still processing,
+    ``/game/next`` should return ``{"status": "waiting"}`` so the frontend
+    shows a "Thinking…" bubble instead of premature congratulations."""
+
+    def _make_game_state(self, projects_dir, name):
+        """Create a game_state.json with a single mastered question
+        and a digest.json still in ``processing`` state."""
+        proj = projects_dir / name
+        proj.mkdir(parents=True, exist_ok=True)
+
+        # digest.json — still processing
+        digest = {
+            "state": "processing",
+            "chunks": [
+                {"original_text": "Content.", "text_keywords": ["kw"], "page_number": 1},
+            ],
+            "chunks_processed": 1,
+            "total_chunks": 3,
+            "updated_at": 0.0,
+        }
+        (proj / "digest.json").write_text(json.dumps(digest), encoding="utf-8")
+
+        # game_state.json — one paragraph with a mastered question
+        game_state = {
+            "project_name": name,
+            "paragraphs": [
+                {
+                    "index": 0,
+                    "unlocked": True,
+                    "questions": [
+                        {
+                            "id": 1,
+                            "title": "Reading Check",
+                            "question_type": "options_choice",
+                            "question_text": "Content.",
+                            "options": ["Ok, i read it", "not yet"],
+                            "correct_answer": ["Ok, i read it"],
+                            "correct_count": 3,
+                            "wrong_count": 0,
+                            "last_seen": 100.0,
+                            "last_answer": "Ok, i read it",
+                            "last_answer_correct": True,
+                            "correct_to_master": 1,
+                        },
+                    ],
+                },
+            ],
+            "updated_at": 100.0,
+        }
+        (proj / "game_state.json").write_text(
+            json.dumps(game_state), encoding="utf-8",
+        )
+
+    def test_returns_waiting_when_digest_processing(self, client, temp_workspace: dict):
+        self._make_game_state(temp_workspace["projects"], "waitproj")
+        resp = client.get("/game/waitproj/next")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data is not None
+        assert data["status"] == "waiting"
+
+    def test_not_complete_when_digest_processing(self, client, temp_workspace: dict):
+        self._make_game_state(temp_workspace["projects"], "waitproj2")
+        resp = client.get("/game/waitproj2/next")
+        data = resp.get_json()
+        assert data["status"] != "complete"
+
+    def test_returns_waiting_when_question_gen_active(self, client, temp_workspace: dict, app):
+        """When the digest is complete but a question-generation backfill
+        job is active, ``/game/next`` should return waiting."""
+        self._make_game_state(temp_workspace["projects"], "bgwait")
+        lazy = app.extensions["lazy_ai_manager"]
+        # Simulate an active question-generation backfill job.
+        lazy._question_gen_active.add("bgwait")
+        try:
+            resp = client.get("/game/bgwait/next")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data is not None
+            assert data["status"] == "waiting"
+        finally:
+            lazy._question_gen_active.discard("bgwait")

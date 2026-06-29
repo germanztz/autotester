@@ -16,10 +16,11 @@ from app.services.question_generator import QuestionGenerator
 class _FakeLLM:
     """Drop-in for OllamaChatClient. Returns canned question JSON."""
 
-    def __init__(self, fail: bool = False, invalid_json: bool = False, empty: bool = False):
+    def __init__(self, fail: bool = False, invalid_json: bool = False, empty: bool = False, mode: str = "mixed"):
         self.fail = fail
         self.invalid_json = invalid_json
         self.empty = empty
+        self.mode = mode
         self.call_count = 0
         self.calls: list[tuple[str, str, str | None]] = []
 
@@ -33,6 +34,13 @@ class _FakeLLM:
             return ""
         if self.invalid_json:
             return "not json at all"
+        if self.mode == "true_false":
+            # Return a single true_false object (not wrapped in array)
+            return json.dumps({
+                "type": "true_false",
+                "question": "The text mentions the keyword in a specific context.",
+                "correct_answer": "true",
+            })
         return json.dumps([
             {
                 "type": "multiple_choice",
@@ -76,6 +84,11 @@ def fake_config_manager():
                 },
                 "ia": {
                     "ollama_model": "qwen3.5:latest",
+                    "question_true_false_user_prompt_tpl": (
+                        'Generate a true/false question in {language} '
+                        'targeting keyword "{keyword}" with answer {target_response}. '
+                        'Text: {text}'
+                    ),
                 },
             }
 
@@ -180,6 +193,91 @@ class TestGenerate:
                 language="en",
             )
         assert fake.call_count == 3  # max retries
+
+
+class TestGenerateTrueFalse:
+    def test_returns_one_question_per_keyword(self, generator: QuestionGenerator):
+        llm = _FakeLLM(mode="true_false")
+        gen = QuestionGenerator(llm, generator.config_manager)
+        questions = gen.generate_true_false_questions(
+            chunk_text="France is a country in Europe.",
+            keywords=["France", "Paris", "Europe"],
+            language="en",
+        )
+        assert len(questions) == 3
+        for q in questions:
+            assert q["type"] == "true_false"
+            assert "question" in q
+            assert q["correct_answer"] in ("true", "false")
+
+    def test_alternates_target_response(self, generator: QuestionGenerator):
+        llm = _FakeLLM(mode="true_false")
+        gen = QuestionGenerator(llm, generator.config_manager)
+        questions = gen.generate_true_false_questions(
+            chunk_text="Sample text.",
+            keywords=["kw0", "kw1", "kw2", "kw3"],
+            language="en",
+        )
+        assert questions[0]["correct_answer"] == "true"
+        assert questions[1]["correct_answer"] == "false"
+        assert questions[2]["correct_answer"] == "true"
+        assert questions[3]["correct_answer"] == "false"
+
+    def test_uses_provided_model(self, generator: QuestionGenerator):
+        llm = _FakeLLM(mode="true_false")
+        gen = QuestionGenerator(llm, generator.config_manager)
+        gen.generate_true_false_questions(
+            chunk_text="Sample text.",
+            keywords=["test"],
+            language="en",
+            model="custom-model",
+        )
+        assert llm.calls[0][0] == "custom-model"
+
+    def test_raises_on_llm_failure(self, generator: QuestionGenerator):
+        llm = _FakeLLM(fail=True, mode="true_false")
+        gen = QuestionGenerator(llm, generator.config_manager)
+        with pytest.raises(RuntimeError, match="True/false question generation failed"):
+            gen.generate_true_false_questions(
+                chunk_text="Sample text.",
+                keywords=["test"],
+                language="en",
+            )
+
+    def test_retries_on_failure(self, generator: QuestionGenerator):
+        llm = _FakeLLM(fail=True, mode="true_false")
+        gen = QuestionGenerator(llm, generator.config_manager)
+        with pytest.raises(RuntimeError):
+            gen.generate_true_false_questions(
+                chunk_text="Sample text.",
+                keywords=["test"],
+                language="en",
+            )
+        assert llm.call_count == 3
+
+    def test_empty_keywords_returns_empty_list(self, generator: QuestionGenerator):
+        llm = _FakeLLM(mode="true_false")
+        gen = QuestionGenerator(llm, generator.config_manager)
+        questions = gen.generate_true_false_questions(
+            chunk_text="Sample text.",
+            keywords=[],
+            language="en",
+        )
+        assert questions == []
+
+    def test_formats_prompt_with_all_placeholders(self, generator: QuestionGenerator):
+        llm = _FakeLLM(mode="true_false")
+        gen = QuestionGenerator(llm, generator.config_manager)
+        gen.generate_true_false_questions(
+            chunk_text="Some text here.",
+            keywords=["mykeyword"],
+            language="fr",
+        )
+        prompt = llm.calls[0][1]
+        assert "Some text here." in prompt
+        assert "mykeyword" in prompt
+        assert "true" in prompt or "false" in prompt
+        assert "fr" in prompt
 
 
 class TestParseResponse:

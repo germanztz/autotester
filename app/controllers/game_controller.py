@@ -67,6 +67,13 @@ def next_question(project_name: str):
         stats = engine.game_manager.get_stats(state)
         if engine.game_manager.has_unprocessed_paragraphs(state):
             return jsonify({"status": "waiting", **stats}), 200
+        # Check if the digest is still running or a question-generation
+        # backfill job is in progress (LLM questions pending).
+        lazy = current_app.extensions.get("lazy_ai_manager")
+        if lazy:
+            dstate = lazy.project_status(project_name)
+            if dstate.get("state") in ("processing", "queued") or lazy.is_question_generation_active(project_name):
+                return jsonify({"status": "waiting", **stats}), 200
         return jsonify({"status": "complete", **stats}), 200
 
     para_idx, q_idx, question = result
@@ -78,9 +85,13 @@ def next_question(project_name: str):
         "question": question.question_text,
         "progress_pct": engine.game_manager.calculate_progress(state),
     }
-    if question.question_type in ("multiple_choice", "options_choice", "fill_gap"):
-        opts = list(question.options)
-        random.shuffle(opts)
+    if question.question_type in ("multiple_choice", "options_choice", "fill_gap", "true_false"):
+        if question.question_type == "true_false":
+            opts = ["True", "False"]
+            random.shuffle(opts)
+        else:
+            opts = list(question.options)
+            random.shuffle(opts)
         question_data["options"] = opts
 
     return jsonify(question_data), 200

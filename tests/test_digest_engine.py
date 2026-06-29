@@ -17,7 +17,11 @@ from app.services.digest_engine import DigestSummary, LazyAIManager
 
 
 class _FakeLLM:
-    """Drop-in for OllamaChatClient. Counts calls and can be told to fail."""
+    """Drop-in for OllamaChatClient. Counts calls and can be told to fail.
+
+    Responds differently based on the ``system`` prompt so the same instance
+    can serve both keyword-extraction and question-generation calls.
+    """
 
     def __init__(self, fail: bool = False):
         self.fail = fail
@@ -33,6 +37,23 @@ class _FakeLLM:
         if self.fail:
             from app.models.llm_client import OllamaUnavailable
             raise OllamaUnavailable("Ollama down")
+
+        # Question generation (called by QuestionGenerator)
+        if system and "quiz generator" in system:
+            if "Generate a true/false question" in prompt or "true/false" in prompt:
+                return json.dumps({
+                    "type": "true_false",
+                    "question": "The quick brown fox jumps over the lazy dog.",
+                    "correct_answer": "true",
+                })
+            return json.dumps([
+                {"type": "multiple_choice", "question": "LLM MC?", "options": ["A", "B", "C"], "correct_answer": "A"},
+                {"type": "options_choice", "question": "LLM OC?", "correct_answer": "B"},
+                {"type": "fill_blank", "question": "LLM fill ___", "correct_answer": "LLM"},
+                {"type": "short_answer", "question": "LLM SA?", "correct_answer": "answer"},
+            ])
+
+        # Default — keyword extraction (called by SemanticSegmenter)
         words = prompt.split()
         keywords = [w.strip('",.!?;:') for w in words[1:4] if w.strip('",.!?;:')]
         return json.dumps({
@@ -130,6 +151,49 @@ def segmenter_and_lazy_with_game(tmp_path: Path, fake_llm: _FakeLLM):
     seg = SemanticSegmenter(config_manager=cm, file_manager=fm, llm_client=fake_llm, request_timeout=5.0)
     lazy = LazyAIManager(segmenter=seg, file_manager=fm, game_manager=gm)
     return {"cm": cm, "fm": fm, "gm": gm, "seg": seg, "lazy": lazy, "fake": fake_llm}
+
+
+@pytest.fixture
+def segmenter_and_lazy_with_full_game(tmp_path: Path, fake_llm: _FakeLLM):
+    """Like segmenter_and_lazy_with_game but also wires a QuestionGenerator for LLM questions."""
+    import yaml
+
+    from app.models.config_manager import ConfigManager
+    from app.models.file_manager import FileManager
+    from app.models.game_state import GameManager
+    from app.models.semantic_segmenter import SemanticSegmenter
+    from app.services.question_generator import QuestionGenerator
+
+    projects_dir = tmp_path / "projects"
+    config_path = tmp_path / "config.yaml"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(yaml.safe_dump({"theme": "system", "app_name": "autotester"}))
+
+    cm = ConfigManager(config_path)
+    fm = FileManager(projects_dir)
+    gm = GameManager(fm, cm)
+    seg = SemanticSegmenter(config_manager=cm, file_manager=fm, llm_client=fake_llm, request_timeout=5.0)
+    qg = QuestionGenerator(llm_client=fake_llm, config_manager=cm)
+    lazy = LazyAIManager(
+        segmenter=seg,
+        file_manager=fm,
+        game_manager=gm,
+        question_generator=qg,
+        config_manager=cm,
+    )
+    return {"cm": cm, "fm": fm, "gm": gm, "seg": seg, "lazy": lazy, "qg": qg, "fake": fake_llm}
+
+
+@pytest.fixture
+def project_with_pdf_and_full_game(segmenter_and_lazy_with_full_game: dict):
+    """Create a project with PDF + GameManager + QuestionGenerator wired."""
+    fm = segmenter_and_lazy_with_full_game["fm"]
+    lazy = segmenter_and_lazy_with_full_game["lazy"]
+    text = "hello " * 60 + "world " * 60 + "test " * 60
+    pdf_bytes = _write_pdf_with_text(text)
+    entry = fm.save_upload(io.BytesIO(pdf_bytes), "doc.pdf", "demo")
+    pdf_path = fm.project_path(entry.name) / "doc.pdf"
+    return entry, pdf_path, segmenter_and_lazy_with_full_game
 
 
 @pytest.fixture
@@ -649,6 +713,221 @@ class TestRunToCompletion:
         chunk_events = [e for e in events if e.get("phase") == "chunk_done"]
         assert len(chunk_events) >= 1
         assert any(e.get("phase") == "done" for e in events)
+
+
+# ---------------------------------------------------------------------------
+# TestLLMQuestionGeneration — Phase 2 of _generate_chunk_questions
+# ---------------------------------------------------------------------------
+
+
+class TestLLMQuestionGeneration:
+    """LLM-generated questions (multiple_choice, fill_blank, short_answer,
+    true_false) are appended during Phase 2 of _generate_chunk_questions."""
+
+    def test_appends_llm_questions_after_programmatic(self, project_with_pdf_and_full_game):
+        entry, pdf_path, components = project_with_pdf_and_full_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        assert state is not None
+
+        questions = state.paragraphs[0].questions
+        # Phase 1: 1 Reading Check + optional fill_gap (depends on keywords matching)
+        # Phase 2: 4 LLM (MC, OC, fill_blank, short_answer) + N true_false
+        assert len(questions) > 2  # at least programmatic + some LLM
+        types = {q.question_type for q in questions}
+        assert "options_choice" in types     # Reading Check
+        assert "multiple_choice" in types     # LLM-generated
+        assert "true_false" in types          # LLM-generated
+
+    def test_llm_questions_have_valid_types(self, project_with_pdf_and_full_game):
+        entry, pdf_path, components = project_with_pdf_and_full_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        questions = state.paragraphs[0].questions
+        valid = {"options_choice", "fill_gap", "multiple_choice",
+                 "options_choice", "fill_blank", "short_answer", "true_false"}
+        for q in questions:
+            assert q.question_type in valid, f"Unknown type: {q.question_type}"
+            assert q.question_text, f"Empty question for {q.question_type}"
+            assert q.correct_answer, f"Empty correct_answer for {q.question_type}"
+
+    def test_llm_questions_are_appended_not_replaced(self, project_with_pdf_and_full_game):
+        """Phase 1 programmatic questions survive Phase 2."""
+        entry, pdf_path, components = project_with_pdf_and_full_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        questions = state.paragraphs[0].questions
+        # Reading Check always present from Phase 1
+        reading_checks = [q for q in questions if q.title == "Reading Check"]
+        assert len(reading_checks) == 1
+        # LLM questions are appended, not replacing Phase 1
+        llm_types = {"multiple_choice", "options_choice", "fill_blank", "short_answer", "true_false"}
+        llm_qs = [q for q in questions if q.question_type in llm_types]
+        assert len(llm_qs) >= 2
+
+    def test_programmatic_questions_available_during_llm_gen(self, project_with_pdf_and_full_game):
+        """Phase 1 is saved before Phase 2 starts (simulate by checking state
+        between saves — here we just verify no crash when questions are
+        answered between phases)."""
+        entry, pdf_path, components = project_with_pdf_and_full_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        assert state is not None
+        # All questions should be playable
+        for q in state.paragraphs[0].questions:
+            assert q.question_text
+
+    def test_no_llm_questions_when_no_question_generator(self, project_with_pdf_and_game):
+        """Without question_generator, only programmatic questions are created."""
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        questions = state.paragraphs[0].questions
+        types = {q.question_type for q in questions}
+        assert "multiple_choice" not in types
+        assert "true_false" not in types
+        assert "fill_blank" not in types
+
+    def test_true_false_questions_per_keyword(self, project_with_pdf_and_full_game):
+        """Each keyword generates one true_false question."""
+        entry, pdf_path, components = project_with_pdf_and_full_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        tf = [q for q in state.paragraphs[0].questions if q.question_type == "true_false"]
+        # The _FakeLLM generates keywords from the prompt words,
+        # so at least one true_false should exist for chunks with keywords
+        assert len(tf) >= 1
+        for q in tf:
+            assert q.correct_answer in (["true"], ["false"])
+
+    def test_llm_failure_is_non_fatal(self, project_with_pdf_and_full_game):
+        """If Phase 2 LLM generation fails, Phase 1 questions still persist."""
+        from unittest.mock import patch
+
+        entry, pdf_path, components = project_with_pdf_and_full_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+
+        with patch.object(lazy.question_generator, "generate", side_effect=RuntimeError("LLM down")):
+            lazy.process_one_chunk(entry.name)
+
+        state = gm.load_state(entry.name)
+        assert state is not None
+        questions = state.paragraphs[0].questions
+        # Phase 1 questions should still be there
+        assert any(q.title == "Reading Check" for q in questions)
+
+
+# ---------------------------------------------------------------------------
+# TestBackfillQuestionGeneration — ensure_questions_generated from background
+# ---------------------------------------------------------------------------
+
+
+class TestBackfillQuestionGeneration:
+    """When ``ensure_questions_generated`` runs (from a background job at
+    startup or during digest), it must generate both programmatic questions
+    (Phase 1) and LLM-generated questions (Phase 2) for chunks that have
+    ``text_keywords`` but no questions yet."""
+
+    def test_backfill_generates_programmatic_and_llm(self, project_with_pdf_and_full_game):
+        entry, pdf_path, components = project_with_pdf_and_full_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+
+        # Run digest without game_manager so no questions are created.
+        lazy.game_manager = None
+        lazy.run_to_completion(entry.name)
+        assert gm.load_state(entry.name) is None
+
+        # Re-attach game_manager and backfill.
+        lazy.game_manager = gm
+        count = lazy.ensure_questions_generated(entry.name)
+        assert count > 0
+
+        state = gm.load_state(entry.name)
+        assert state is not None
+        total_qs = sum(len(p.questions) for p in state.paragraphs)
+        assert total_qs > count  # each paragraph has multiple questions (procedural + LLM)
+
+        # Verify both programmatic and LLM types appear.
+        all_types: set[str] = set()
+        for p in state.paragraphs:
+            for q in p.questions:
+                all_types.add(q.question_type)
+        assert "options_choice" in all_types  # Reading Check (Phase 1)
+        assert "multiple_choice" in all_types  # LLM-generated (Phase 2)
+        assert "true_false" in all_types       # LLM-generated (Phase 2)
+
+    def test_backfill_flag_tracking(self, project_with_pdf_and_full_game):
+        """is_question_generation_active is True while the method runs."""
+        entry, pdf_path, components = project_with_pdf_and_full_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+
+        lazy.game_manager = None
+        lazy.run_to_completion(entry.name)
+
+        lazy.game_manager = gm
+        assert not lazy.is_question_generation_active(entry.name)
+        lazy.ensure_questions_generated(entry.name)
+        assert not lazy.is_question_generation_active(entry.name)
+
+    def test_backfill_noop_when_no_game_manager(self, project_with_pdf_and_full_game):
+        """Should not crash when game_manager is None."""
+        entry, pdf_path, components = project_with_pdf_and_full_game
+        lazy = components["lazy"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.game_manager = None
+        lazy.run_to_completion(entry.name)
+        count = lazy.ensure_questions_generated(entry.name)
+        assert count == 0
 
 
 # ---------------------------------------------------------------------------

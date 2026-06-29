@@ -36,6 +36,16 @@ _DEFAULT_TITLE_SYSTEM_PROMPT = (
     "Respond only with valid JSON, no extra text."
 )
 
+_DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL = (
+    'Generate a true/false question in {language} based on the following text. '
+    'The question must target the keyword "{keyword}" and the correct answer '
+    'must be "{target_response}". '
+    'Do NOT copy phrases from the original text - rephrase the concept in your own words. '
+    'Return ONLY valid JSON with exactly these fields (no markdown, no extra text):\n'
+    '{{"type": "true_false", "question": "your statement here", "correct_answer": "{target_response}"}}\n\n'
+    'Text:\n{text}'
+)
+
 _DEFAULT_TITLE_USER_PROMPT_TPL = (
     "Based on the following text, generate a short title of 1 to 7 words that "
     "represents the project and detect the language of the text. "
@@ -54,6 +64,7 @@ IA_DEFAULTS: dict[str, Any] = {
     "user_prompt_tpl": _DEFAULT_USER_PROMPT_TPL,
     "title_system_prompt": _DEFAULT_TITLE_SYSTEM_PROMPT,
     "title_user_prompt_tpl": _DEFAULT_TITLE_USER_PROMPT_TPL,
+    "question_true_false_user_prompt_tpl": _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL,
 }
 
 LOGGING_DEFAULTS: dict[str, Any] = {
@@ -108,6 +119,12 @@ def _validate_ia(ia: dict[str, Any]) -> None:
         raise ValueError("title_user_prompt_tpl must be a non-empty string")
     if "{text}" not in title_user_prompt_tpl:
         raise ValueError("title_user_prompt_tpl must contain the {text} placeholder")
+    tf_user_prompt = ia.get("question_true_false_user_prompt_tpl", "")
+    if not isinstance(tf_user_prompt, str) or not tf_user_prompt.strip():
+        raise ValueError("question_true_false_user_prompt_tpl must be a non-empty string")
+    for ph in ("{text}", "{keyword}", "{target_response}", "{language}"):
+        if ph not in tf_user_prompt:
+            raise ValueError(f"question_true_false_user_prompt_tpl must contain the {ph} placeholder")
 
 
 def _validate_game(game_cfg: dict[str, Any]) -> None:

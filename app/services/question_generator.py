@@ -14,6 +14,16 @@ _QUESTION_SYSTEM_PROMPT = (
     "document content. Respond only with valid JSON, no extra text."
 )
 
+_TRUE_FALSE_USER_PROMPT_TPL = (
+    'Generate a true/false question in {language} based on the following text. '
+    'The question must target the keyword "{keyword}" and the correct answer '
+    'must be "{target_response}". '
+    'Do NOT copy phrases from the original text - rephrase the concept in your own words. '
+    'Return ONLY valid JSON with exactly these fields (no markdown, no extra text):\n'
+    '{{"type": "true_false", "question": "your statement here", "correct_answer": "{target_response}"}}\n\n'
+    'Text:\n{text}'
+)
+
 _QUESTION_USER_PROMPT_TPL = (
     "Based on the following text and its keywords, create {count} questions "
     "in {language} to help memorize the content. "
@@ -116,6 +126,105 @@ class QuestionGenerator:
         raise RuntimeError(
             f"Question generation failed after {_MAX_RETRIES} attempts: {last_error}"
         )
+
+    def generate_true_false_questions(
+        self,
+        chunk_text: str,
+        keywords: list[str],
+        language: str = "es",
+        model: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Generate one true/false question per keyword.
+
+        Each keyword is assigned a target_response (true/false) alternating
+        by index parity so not all correct answers are the same.  One LLM
+        call is made per keyword using the configurable prompt template.
+
+        Args:
+            chunk_text: The paragraph text.
+            keywords: Extracted keywords for this chunk.
+            language: Language code for questions (e.g., "es", "en").
+            model: Ollama model name. Falls back to game config, then IA config.
+
+        Returns:
+            List of question dicts with keys: type, question, correct_answer.
+
+        Raises:
+            RuntimeError: If the LLM fails after all retries or returns invalid JSON.
+        """
+        if not model:
+            cfg = self.config_manager.load()
+            ia_cfg = cfg.get("ia", {})
+            game_cfg = cfg.get("game", {})
+            model = game_cfg.get("model") or ia_cfg.get("ollama_model", "qwen3.5:latest")
+
+        cfg = self.config_manager.load()
+        tpl = cfg.get("ia", {}).get(
+            "question_true_false_user_prompt_tpl",
+            _TRUE_FALSE_USER_PROMPT_TPL,
+        )
+
+        questions: list[dict[str, Any]] = []
+        for idx, keyword in enumerate(keywords):
+            target_response = "true" if idx % 2 == 0 else "false"
+            prompt = tpl.format(
+                text=chunk_text,
+                keyword=keyword,
+                target_response=target_response,
+                language=language,
+            )
+
+            last_error: Optional[str] = None
+            parsed: Optional[list[dict[str, Any]]] = None
+            for attempt in range(1, _MAX_RETRIES + 1):
+                try:
+                    raw = self.llm.generate(
+                        model,
+                        prompt,
+                        system=_QUESTION_SYSTEM_PROMPT,
+                        format_json=False,
+                    )
+                except Exception as exc:
+                    last_error = f"{type(exc).__name__}: {exc}"
+                    logger.warning(
+                        "True/false generation kw=%r attempt %d/%d failed: %s",
+                        keyword, attempt, _MAX_RETRIES, last_error,
+                    )
+                    if attempt < _MAX_RETRIES:
+                        time.sleep(_RETRY_DELAY_SECONDS * attempt)
+                    continue
+
+                # Wrap single-LLM response in an array so _parse_response works.
+                wrapped = f"[{raw.strip()}]"
+                parsed = self._parse_response(wrapped, 1)
+                if parsed is not None:
+                    break
+
+                last_error = "Invalid JSON response from LLM"
+                logger.warning(
+                    "True/false generation kw=%r attempt %d/%d: %s",
+                    keyword, attempt, _MAX_RETRIES, last_error,
+                )
+                if attempt < _MAX_RETRIES:
+                    time.sleep(_RETRY_DELAY_SECONDS * attempt)
+
+            if parsed is None:
+                raise RuntimeError(
+                    f"True/false question generation failed for keyword {keyword!r} "
+                    f"after {_MAX_RETRIES} attempts: {last_error}"
+                )
+
+            q = parsed[0]
+            # Override correct_answer to match the assigned target_response
+            # in case the LLM got it wrong.
+            q["correct_answer"] = target_response
+            questions.append(q)
+
+        logger.info(
+            "Generated %d true/false questions | model=%s language=%s",
+            len(questions), model, language,
+        )
+        return questions
 
     def _parse_response(
         self, raw: str, expected_count: int

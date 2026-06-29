@@ -26,6 +26,12 @@ class TestIaDefaults:
         assert isinstance(ia["title_system_prompt"], str) and ia["title_system_prompt"]
         assert isinstance(ia["title_user_prompt_tpl"], str) and ia["title_user_prompt_tpl"]
         assert "{text}" in ia["title_user_prompt_tpl"]
+        assert "question_true_false_user_prompt_tpl" in ia
+        assert isinstance(ia["question_true_false_user_prompt_tpl"], str) and ia["question_true_false_user_prompt_tpl"]
+        assert "{text}" in ia["question_true_false_user_prompt_tpl"]
+        assert "{keyword}" in ia["question_true_false_user_prompt_tpl"]
+        assert "{target_response}" in ia["question_true_false_user_prompt_tpl"]
+        assert "{language}" in ia["question_true_false_user_prompt_tpl"]
 
     def test_ia_defaults_constant_exports_expected_keys(self):
         assert set(IA_DEFAULTS.keys()) == {
@@ -37,6 +43,7 @@ class TestIaDefaults:
             "user_prompt_tpl",
             "title_system_prompt",
             "title_user_prompt_tpl",
+            "question_true_false_user_prompt_tpl",
         }
 
 

@@ -96,12 +96,29 @@ class QuestionEngine:
             language = game_cfg.get("language", "es")
             qpp = game_cfg.get("questions_per_paragraph", 5)
 
+            keywords = chunk.get("text_keywords", [])
+
             questions = self.generator.generate(
                 chunk_text=chunk["original_text"],
-                keywords=chunk.get("text_keywords", []),
+                keywords=keywords,
                 count=qpp,
                 language=language,
             )
+
+            if keywords:
+                try:
+                    tf_questions = self.generator.generate_true_false_questions(
+                        chunk_text=chunk["original_text"],
+                        keywords=keywords,
+                        language=language,
+                    )
+                    questions.extend(tf_questions)
+                except Exception as exc:
+                    logger.warning(
+                        "True/false generation failed for paragraph %d of %s: %s",
+                        para_idx, project_name, exc,
+                    )
+
             self.game_manager.store_questions(project_name, para_idx, questions)
             logger.info(
                 "Generated %d questions for paragraph %d of %s",

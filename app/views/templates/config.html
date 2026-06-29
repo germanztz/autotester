@@ -107,6 +107,15 @@
                     text. Use <code>{text}</code> as a placeholder.
                 </div>
             </div>
+            <div class="mb-3">
+                <label class="form-label" for="question_true_false_user_prompt_tpl">True/False question prompt</label>
+                <textarea class="form-control font-monospace" id="question_true_false_user_prompt_tpl" name="question_true_false_user_prompt_tpl" rows="6">{{ app_config.ia.question_true_false_user_prompt_tpl }}</textarea>
+                <div class="form-text">
+                    Sent once per keyword to generate a True/False question. Use <code>{text}</code>,
+                    <code>{keyword}</code>, <code>{target_response}</code>, and <code>{language}</code>
+                    as placeholders.
+                </div>
+            </div>
         </div>
     </div>
 </div>

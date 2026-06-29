@@ -104,7 +104,7 @@
         var bar = $("chat-input-bar");
         if (!bar) return;
         bar.classList.remove("d-none");
-        if (type === "multiple_choice" || type === "options_choice" || type === "fill_gap") {
+        if (type === "multiple_choice" || type === "options_choice" || type === "fill_gap" || type === "true_false") {
             renderMCInput(options);
         } else if (type === "fill_blank") {
             renderTextInput("Type your answer...");
