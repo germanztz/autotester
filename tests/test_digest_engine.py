@@ -323,7 +323,7 @@ class TestProcessOneChunk:
 
 
 class TestGenerateChunkQuestions:
-    def test_creates_game_state_with_true_false_question(self, project_with_pdf_and_game):
+    def test_creates_game_state_with_options_choice_question(self, project_with_pdf_and_game):
         entry, pdf_path, components = project_with_pdf_and_game
         lazy = components["lazy"]
         gm = components["gm"]
@@ -338,10 +338,12 @@ class TestGenerateChunkQuestions:
         assert len(state.paragraphs[0].questions) == 1
 
         q = state.paragraphs[0].questions[0]
-        assert q.question_type == "true_false"
+        assert q.question_type == "options_choice"
         assert q.title == "Reading Check"
-        assert "Did you read the paragraph?" in q.question_text
-        assert q.correct_answer == "true"
+        assert q.correct_answer == ["Ok, i read it"]
+        assert q.options == ["Ok, i read it", "not yet"]
+        assert q.correct_to_master == 1
+        assert len(q.question_text) > 0
 
     def test_question_has_auto_incrementing_id(self, project_with_pdf_and_game):
         entry, pdf_path, components = project_with_pdf_and_game
@@ -408,6 +410,133 @@ class TestGenerateChunkQuestions:
         digest_path = components["fm"].project_path(entry.name) / "digest.json"
         data = json.loads(digest_path.read_text(encoding="utf-8"))
         assert "game_state" not in data
+
+
+# ---------------------------------------------------------------------------
+# TestFillTheGap
+# ---------------------------------------------------------------------------
+
+
+class TestFillTheGap:
+    """Fill-the-gap questions generated alongside the Reading Check."""
+
+    def test_one_question_per_keyword(self, project_with_pdf_and_game):
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        chunk_text = "The quick brown fox jumps over the lazy dog near the river."
+        chunks = [
+            {
+                "original_text": chunk_text,
+                "page_number": 1,
+                "text_keywords": ["fox", "dog", "lazy", "jumps", "quick"],
+            }
+        ]
+        lazy._save_chunks(entry.name, chunks)
+        lazy._generate_chunk_questions(entry.name, chunk_text, 0)
+
+        state = gm.load_state(entry.name)
+        assert state is not None
+
+        questions = state.paragraphs[0].questions
+        # 1 Reading Check + 5 fill_gap = 6
+        assert len(questions) == 6
+
+        assert questions[0].title == "Reading Check"
+        assert questions[0].question_type == "options_choice"
+
+        seen = set()
+        for q in questions[1:]:
+            assert q.title == "Fill the Gap"
+            assert q.question_type == "fill_gap"
+            assert q.correct_to_master == 0
+            kw = q.correct_answer[0].lower()
+            assert kw not in seen  # each keyword appears once
+            seen.add(kw)
+            assert kw in chunk_text.lower()
+            assert "________" in q.question_text
+            assert kw in [o.lower() for o in q.options]
+            # All options are different
+            assert len(set(o.lower() for o in q.options)) == len(q.options)
+
+    def test_replaces_all_occurrences_case_insensitive(self, project_with_pdf_and_game):
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        chunk_text = "The Fox saw another fox. The quick brown fox jumps over the lazy dog."
+        chunks = [
+            {
+                "original_text": chunk_text,
+                "page_number": 1,
+                "text_keywords": ["fox", "dog"],
+            }
+        ]
+        lazy._save_chunks(entry.name, chunks)
+        lazy._generate_chunk_questions(entry.name, chunk_text, 0)
+
+        state = gm.load_state(entry.name)
+        questions = state.paragraphs[0].questions
+
+        fox_qs = [
+            q for q in questions
+            if q.title == "Fill the Gap" and q.correct_answer[0].lower() == "fox"
+        ]
+        assert len(fox_qs) == 1
+        assert fox_qs[0].question_text == "The ________ saw another ________."
+
+    def test_no_fill_gap_when_no_keywords(self, project_with_pdf_and_game):
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        chunk_text = "Some text without any extracted keywords."
+        chunks = [{"original_text": chunk_text, "page_number": 1, "text_keywords": None}]
+        lazy._save_chunks(entry.name, chunks)
+        lazy._generate_chunk_questions(entry.name, chunk_text, 0)
+
+        state = gm.load_state(entry.name)
+        assert len(state.paragraphs[0].questions) == 1
+        assert state.paragraphs[0].questions[0].title == "Reading Check"
+
+    def test_skip_keyword_not_in_sentence(self, project_with_pdf_and_game):
+        entry, pdf_path, components = project_with_pdf_and_game
+        lazy = components["lazy"]
+        gm = components["gm"]
+        seg = components["seg"]
+        seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
+        lazy.ensure_cache(entry.name, pdf_path)
+        lazy.process_one_chunk(entry.name)
+
+        chunk_text = "The quick brown fox jumps."
+        chunks = [
+            {
+                "original_text": chunk_text,
+                "page_number": 1,
+                "text_keywords": ["fox", "nonexistent"],
+            }
+        ]
+        lazy._save_chunks(entry.name, chunks)
+        lazy._generate_chunk_questions(entry.name, chunk_text, 0)
+
+        state = gm.load_state(entry.name)
+        questions = state.paragraphs[0].questions
+        # 1 Reading Check + 1 fill_gap (fox only, nonexistent skipped)
+        assert len(questions) == 2
+        assert questions[1].correct_answer[0] == "fox"
 
 
 # ---------------------------------------------------------------------------

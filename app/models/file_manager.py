@@ -66,11 +66,12 @@ def _load_game_state(project_dir: Path) -> dict[str, Any]:
         if not isinstance(data, dict):
             return dict(_GAME_DEFAULTS)
         paragraphs = data.get("paragraphs", [])
-        total_questions = sum(len(p.get("questions", [])) for p in paragraphs)
         total_correct = sum(
             q.get("correct_count", 0) for p in paragraphs for q in p.get("questions", [])
         )
-        total_possible = total_questions * 3  # correct_to_master default
+        total_possible = sum(
+            q.get("correct_to_master") or 3 for p in paragraphs for q in p.get("questions", [])
+        )
         progress_pct = round((total_correct / total_possible) * 100, 1) if total_possible > 0 else 0.0
         unlocked_count = sum(1 for p in paragraphs if p.get("unlocked", False))
         return {

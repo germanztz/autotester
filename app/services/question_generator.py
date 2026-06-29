@@ -19,13 +19,13 @@ _QUESTION_USER_PROMPT_TPL = (
     "in {language} to help memorize the content. "
     "Use a mix of question types:\n"
     '- "multiple_choice": question with 4 options, one correct\n'
-    '- "true_false": statement to verify\n'
+    '- "options_choice": question with several options to choose from\n'
     '- "fill_blank": sentence with a missing word (use ___ for the blank)\n'
     '- "short_answer": question answerable in 1-3 words\n\n'
     "Keywords: {keywords}\n\n"
     "Text:\n{text}\n\n"
     "Return a JSON array of objects. Each object must have:\n"
-    '- "type": one of "multiple_choice", "true_false", "fill_blank", "short_answer"\n'
+    '- "type": one of "multiple_choice", "options_choice", "fill_blank", "short_answer"\n'
     '- "question": the question text\n'
     '- "options": ["A", "B", "C", "D"]  (only for multiple_choice)\n'
     '- "correct_answer": the correct answer\n'
@@ -140,7 +140,7 @@ class QuestionGenerator:
         if not isinstance(data, list):
             return None
 
-        valid_types = {"multiple_choice", "true_false", "fill_blank", "short_answer"}
+        valid_types = {"multiple_choice", "true_false", "options_choice", "fill_blank", "short_answer"}
         questions: list[dict[str, Any]] = []
         for item in data:
             if not isinstance(item, dict):

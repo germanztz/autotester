@@ -26,7 +26,7 @@ class _FakeLLM:
         self.call_count += 1
         return json.dumps([
             {"type": "multiple_choice", "question": "Q1?", "options": ["A", "B", "C"], "correct_answer": "A"},
-            {"type": "true_false", "question": "Q2?", "correct_answer": "true"},
+            {"type": "options_choice", "question": "Q2?", "correct_answer": "true"},
             {"type": "fill_blank", "question": "Q3 ___", "correct_answer": "word"},
             {"type": "short_answer", "question": "Q4?", "correct_answer": "ans"},
         ])

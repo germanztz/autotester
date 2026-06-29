@@ -41,7 +41,7 @@ class _FakeLLM:
                 "correct_answer": "Paris",
             },
             {
-                "type": "true_false",
+                "type": "options_choice",
                 "question": "Paris is the capital of France.",
                 "correct_answer": "true",
             },
@@ -102,7 +102,7 @@ class TestGenerate:
         )
         assert len(questions) == 4
         assert questions[0]["type"] == "multiple_choice"
-        assert questions[1]["type"] == "true_false"
+        assert questions[1]["type"] == "options_choice"
         assert questions[2]["type"] == "fill_blank"
         assert questions[3]["type"] == "short_answer"
 
@@ -185,7 +185,7 @@ class TestGenerate:
 class TestParseResponse:
     def test_strips_markdown_code_fence(self, generator: QuestionGenerator):
         raw = "```json\n" + json.dumps([
-            {"type": "true_false", "question": "Test?", "correct_answer": "true"},
+            {"type": "options_choice", "question": "Test?", "correct_answer": "true"},
         ]) + "\n```"
         questions = generator._parse_response(raw, 1)
         assert questions is not None
@@ -200,7 +200,7 @@ class TestParseResponse:
     def test_filters_invalid_question_types(self, generator: QuestionGenerator):
         raw = json.dumps([
             {"type": "invalid_type", "question": "Test?", "correct_answer": "A"},
-            {"type": "true_false", "question": "Valid?", "correct_answer": "true"},
+            {"type": "options_choice", "question": "Valid?", "correct_answer": "true"},
         ])
         questions = generator._parse_response(raw, 2)
         assert questions is not None
@@ -208,7 +208,7 @@ class TestParseResponse:
 
     def test_filters_missing_correct_answer(self, generator: QuestionGenerator):
         raw = json.dumps([
-            {"type": "true_false", "question": "Test?", "correct_answer": ""},
+            {"type": "options_choice", "question": "Test?", "correct_answer": ""},
         ])
         questions = generator._parse_response(raw, 1)
         assert questions is None  # no valid questions
@@ -231,5 +231,5 @@ class TestGenerateIntegration:
         )
         assert 1 <= len(questions) <= 5
         types_found = {q["type"] for q in questions}
-        valid = {"multiple_choice", "true_false", "fill_blank", "short_answer"}
+        valid = {"multiple_choice", "options_choice", "fill_blank", "short_answer"}
         assert types_found.issubset(valid)

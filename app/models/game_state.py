@@ -16,20 +16,22 @@ logger = get_logger()
 class QuestionRecord:
     """A single question with its progress toward mastery."""
 
-    question_type: str  # multiple_choice | true_false | fill_blank | short_answer
+    question_type: str  # multiple_choice | options_choice | fill_blank | short_answer | fill_gap
     question_text: str
     id: int = 0
     title: str = ""
     options: list[str] = field(default_factory=list)
-    correct_answer: str = ""
+    correct_answer: list[str] = field(default_factory=list)
     correct_count: int = 0
     wrong_count: int = 0
     last_seen: float = 0.0
     last_answer: str = ""
     last_answer_correct: bool = False
+    correct_to_master: int = 0  # 0 = use global default from config
 
-    def is_mastered(self, correct_to_master: int) -> bool:
-        return self.correct_count >= correct_to_master
+    def is_mastered(self, default_correct_to_master: int) -> bool:
+        threshold = self.correct_to_master if self.correct_to_master > 0 else default_correct_to_master
+        return self.correct_count >= threshold
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -44,22 +46,27 @@ class QuestionRecord:
             "last_seen": self.last_seen,
             "last_answer": self.last_answer,
             "last_answer_correct": self.last_answer_correct,
+            "correct_to_master": self.correct_to_master,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> QuestionRecord:
+        ca = data.get("correct_answer", "")
+        if isinstance(ca, str):
+            ca = [ca] if ca else []
         return cls(
             id=data.get("id", 0),
             title=data.get("title", ""),
             question_type=data["question_type"],
             question_text=data["question_text"],
             options=data.get("options", []),
-            correct_answer=data.get("correct_answer", ""),
+            correct_answer=ca,
             correct_count=data.get("correct_count", 0),
             wrong_count=data.get("wrong_count", 0),
             last_seen=data.get("last_seen", 0.0),
             last_answer=data.get("last_answer", ""),
             last_answer_correct=data.get("last_answer_correct", False),
+            correct_to_master=data.get("correct_to_master", 0),
         )
 
 
@@ -248,7 +255,13 @@ class GameManager:
         """Check an answer, update state, return feedback."""
         para = state.paragraphs[para_idx]
         q = para.questions[q_idx]
-        is_correct = q.correct_answer.strip().lower() == answer.strip().lower()
+
+        before_completed = para.all_answered_correctly_at_least_once()
+
+        is_correct = any(
+            ca.strip().lower() == answer.strip().lower()
+            for ca in q.correct_answer
+        )
         q.last_answer = answer.strip()
         q.last_answer_correct = is_correct
         if is_correct:
@@ -259,13 +272,18 @@ class GameManager:
 
         cfg = self._get_game_config()
         ctm = cfg.get("correct_to_master", 3)
-        just_mastered = q.correct_count == ctm
+        threshold = q.correct_to_master if q.correct_to_master > 0 else ctm
+        just_mastered = q.correct_count == threshold
+
+        para_just_completed = not before_completed and para.all_answered_correctly_at_least_once()
+        next_para_unlocked = False
 
         # Check if this paragraph can now be unlocked
         if para.unlocked and para_idx + 1 < len(state.paragraphs):
             next_para = state.paragraphs[para_idx + 1]
             if not next_para.unlocked and para.all_answered_correctly_at_least_once():
                 next_para.unlocked = True
+                next_para_unlocked = True
                 logger.info(
                     "Paragraph %d unlocked for %s", para_idx + 1, state.project_name
                 )
@@ -279,6 +297,11 @@ class GameManager:
             "wrong_count": q.wrong_count,
             "just_mastered": just_mastered,
             "is_mastered": q.is_mastered(ctm),
+            "mastery_threshold": threshold,
+            "para_idx": para_idx,
+            "q_idx": q_idx,
+            "para_just_completed": para_just_completed,
+            "next_para_unlocked": next_para_unlocked,
             "progress_pct": self.calculate_progress(state),
         }
 
@@ -289,22 +312,27 @@ class GameManager:
         whether it was correct, and the correct answer.
         """
         answered = [
-            q for p in state.paragraphs for q in p.questions
+            (pi, qi, q)
+            for pi, p in enumerate(state.paragraphs)
+            for qi, q in enumerate(p.questions)
             if q.last_answer
         ]
-        answered.sort(key=lambda q: q.last_seen, reverse=True)
+        answered.sort(key=lambda x: x[2].last_seen, reverse=True)
         entries = answered[:count]
         entries.reverse()
         return [
             {
+                "title": q.title,
                 "question_text": q.question_text,
                 "question_type": q.question_type,
                 "options": q.options,
                 "last_answer": q.last_answer,
                 "last_answer_correct": q.last_answer_correct,
                 "correct_answer": q.correct_answer,
+                "para_idx": pi,
+                "q_idx": qi,
             }
-            for q in entries
+            for pi, qi, q in entries
         ]
 
     def init_game(self, project_name: str, num_paragraphs: int) -> GameState:
@@ -334,7 +362,11 @@ class GameManager:
                 question_type=q["type"],
                 question_text=q["question"],
                 options=q.get("options", []),
-                correct_answer=q["correct_answer"],
+                correct_answer=(
+                    q["correct_answer"]
+                    if isinstance(q["correct_answer"], list)
+                    else [q["correct_answer"]] if q["correct_answer"] else []
+                ),
             )
             for q in questions
         ]

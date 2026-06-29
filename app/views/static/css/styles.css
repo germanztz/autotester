@@ -105,6 +105,17 @@ body {
     border-bottom-right-radius: 0.25rem;
 }
 
+.chat-bubble.title {
+    align-self: center;
+    background: transparent;
+    border: 1px dashed var(--bs-border-color);
+    color: var(--bs-secondary-color);
+    font-size: 0.8rem;
+    padding: 0.3rem 1rem;
+    border-radius: 1rem;
+    max-width: 40%;
+}
+
 .chat-bubble.feedback {
     align-self: flex-start;
     border-bottom-left-radius: 0.25rem;
@@ -133,6 +144,11 @@ body {
 [data-bs-theme="dark"] .chat-bubble.feedback.incorrect {
     background: #3d1a1a;
     color: #ea868f;
+}
+
+[data-bs-theme="dark"] .chat-bubble.title {
+    border-color: var(--bs-border-color);
+    color: var(--bs-secondary-color);
 }
 
 /* ====== Chat input bar controls ====== */

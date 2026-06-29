@@ -9,6 +9,22 @@
     var autoAdvanceTimer = null;
     var isProcessing = false;
 
+    function _resetUI() {
+        currentQuestion = null;
+        isProcessing = false;
+        if (pollTimer) {
+            clearTimeout(pollTimer);
+            pollTimer = null;
+        }
+        if (autoAdvanceTimer) {
+            clearTimeout(autoAdvanceTimer);
+            autoAdvanceTimer = null;
+        }
+        var cm = $("chat-messages");
+        if (cm) cm.innerHTML = "";
+        hideInput();
+    }
+
     function escapeHtml(s) {
         return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
             return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
@@ -66,14 +82,6 @@
         }).join("");
     }
 
-    function renderTFInput() {
-        var inner = $("chat-input-inner");
-        if (!inner) return;
-        inner.innerHTML =
-            '<button class="btn btn-outline-primary chat-option-btn" data-answer="true">True</button>' +
-            '<button class="btn btn-outline-primary chat-option-btn" data-answer="false">False</button>';
-    }
-
     function renderTextInput(placeholder) {
         var inner = $("chat-input-inner");
         if (!inner) return;
@@ -96,10 +104,8 @@
         var bar = $("chat-input-bar");
         if (!bar) return;
         bar.classList.remove("d-none");
-        if (type === "multiple_choice") {
+        if (type === "multiple_choice" || type === "options_choice" || type === "fill_gap") {
             renderMCInput(options);
-        } else if (type === "true_false") {
-            renderTFInput();
         } else if (type === "fill_blank") {
             renderTextInput("Type your answer...");
         } else if (type === "short_answer") {
@@ -131,12 +137,16 @@
             '<i class="bi bi-file-earmark-text"></i> ' + escapeHtml(displayName);
         var cm = $("chat-messages");
         if (cm) cm.innerHTML = "";
-        hideInput();
         addBubble("bot",
-            '<p class="mb-2">Ready to test your knowledge on <strong>' + escapeHtml(displayName) + '</strong>?</p>' +
-            '<button class="btn btn-primary" id="startGameBtn">' +
-            '<i class="bi bi-play-fill"></i> Start Game</button>'
+            '<p class="mb-2">Ready to test your knowledge on <strong>' + escapeHtml(displayName) + '</strong>?</p>'
         );
+        var inner = $("chat-input-inner");
+        if (inner) {
+            inner.innerHTML = '<button class="btn btn-primary" id="startGameBtn">' +
+                '<i class="bi bi-play-fill"></i> Start Game</button>';
+        }
+        var bar = $("chat-input-bar");
+        if (bar) bar.classList.remove("d-none");
     }
 
     function renderCompleteContent(stats) {
@@ -159,13 +169,17 @@
     // ----- History reconstruction -----
 
     function renderHistoryItem(item) {
+        if (item.title) {
+            addBubble("title", "<strong>" + escapeHtml(item.title) + "</strong>");
+        }
         addBubble("bot", "<strong>" + escapeHtml(item.question_text) + "</strong>");
         addBubble("user", escapeHtml(item.last_answer));
         var cls = item.last_answer_correct ? "correct" : "incorrect";
         var icon = item.last_answer_correct ? "bi-check-circle-fill" : "bi-x-circle-fill";
+        var answerText = Array.isArray(item.correct_answer) ? item.correct_answer.join(", ") : item.correct_answer;
         var msg = item.last_answer_correct
             ? "Correct!"
-            : "Incorrect. Correct answer: " + escapeHtml(item.correct_answer);
+            : "Incorrect. Correct answer: " + escapeHtml(answerText);
         var bubble = addBubble("feedback", '<i class="bi ' + icon + ' feedback-icon"></i> ' + msg);
         if (bubble) bubble.classList.add(cls);
     }
@@ -207,16 +221,38 @@
 
     function renderQuestion(q) {
         currentQuestion = q;
+        if (q.title) {
+            addBubble("title", "<strong>" + escapeHtml(q.title) + "</strong>");
+        }
         addBubble("bot", "<strong>" + escapeHtml(q.question) + "</strong>");
         renderInput(q.type, q.options);
     }
 
-    function renderFeedback(correct, correctAnswer, isMastered) {
+    function renderFeedback(data) {
+        var correct = data.correct;
+        var correctAnswer = data.correct_answer;
+        var isMastered = data.just_mastered;
+        var paraIdx = data.para_idx;
+        var qIdx = data.q_idx;
+        var paraJustCompleted = data.para_just_completed;
+        var nextParaUnlocked = data.next_para_unlocked;
+
         var cls = correct ? "correct" : "incorrect";
         var icon = correct ? "bi-check-circle-fill" : "bi-x-circle-fill";
-        var msg = correct
-            ? (isMastered ? "Correct! Question mastered!" : "Correct!")
-            : "Incorrect. Correct answer: " + escapeHtml(correctAnswer);
+        var answerText = Array.isArray(correctAnswer) ? correctAnswer.join(", ") : correctAnswer;
+
+        var parts = [];
+        if (correct) {
+            parts.push("The question " + (qIdx + 1) + " of the paragraph " + (paraIdx + 1) + " is Correct!");
+            if (isMastered) parts.push("Question mastered!");
+            if (paraJustCompleted) parts.push("You mastered the paragraph " + (paraIdx + 1) + " too!");
+            if (nextParaUnlocked) parts.push("Paragraph " + (nextParaUnlocked === true ? (paraIdx + 2) : nextParaUnlocked) + " unlocked!");
+        } else {
+            parts.push("The question " + (qIdx + 1) + " of the paragraph " + (paraIdx + 1) + " is Incorrect.");
+            parts.push("Correct answer: " + escapeHtml(answerText));
+        }
+
+        var msg = parts.join(" ");
         var bubble = addBubble("feedback", '<i class="bi ' + icon + ' feedback-icon"></i> ' + msg);
         if (bubble) bubble.classList.add(cls);
     }
@@ -237,7 +273,7 @@
                 return;
             }
             if (window.refreshSidebar) window.refreshSidebar();
-            renderFeedback(data.correct, data.correct_answer, data.just_mastered);
+            renderFeedback(data);
             var delay = data.correct ? 1500 : 2000;
             autoAdvanceTimer = setTimeout(function () {
                 autoAdvanceTimer = null;
@@ -305,6 +341,7 @@
         apiCall("POST", "/game/" + encodeURIComponent(projectName) + "/reset", null, function (data) {
             if (data.status === "reset") {
                 if (window.refreshSidebar) window.refreshSidebar();
+                _resetUI();
                 renderStartView(projectName, currentDisplayName);
             }
         });
@@ -335,22 +372,10 @@
         selectProject: function (projectName, displayName) {
             currentProject = projectName;
             currentDisplayName = displayName;
-            currentQuestion = null;
-            isProcessing = false;
-            if (pollTimer) {
-                clearTimeout(pollTimer);
-                pollTimer = null;
-            }
-            if (autoAdvanceTimer) {
-                clearTimeout(autoAdvanceTimer);
-                autoAdvanceTimer = null;
-            }
+            _resetUI();
 
             $("panel-title").innerHTML =
                 '<i class="bi bi-file-earmark-text"></i> ' + escapeHtml(displayName);
-            var cm = $("chat-messages");
-            if (cm) cm.innerHTML = "";
-            hideInput();
 
             apiCall("GET", "/game/" + encodeURIComponent(projectName) + "/status", null, function (data) {
                 if (data.status === "not_started") {
@@ -371,16 +396,7 @@
         deselectProject: function () {
             currentProject = null;
             currentDisplayName = null;
-            currentQuestion = null;
-            isProcessing = false;
-            if (pollTimer) {
-                clearTimeout(pollTimer);
-                pollTimer = null;
-            }
-            if (autoAdvanceTimer) {
-                clearTimeout(autoAdvanceTimer);
-                autoAdvanceTimer = null;
-            }
+            _resetUI();
             renderWelcome();
         },
     };
@@ -429,6 +445,10 @@
                             if (window.refreshSidebar) window.refreshSidebar();
                             var m = bootstrap.Modal.getInstance(document.getElementById("renameModal"));
                             if (m) m.hide();
+                            if (proj === currentProject) {
+                                _resetUI();
+                                renderStartView(proj, currentDisplayName);
+                            }
                         }
                     });
                 }

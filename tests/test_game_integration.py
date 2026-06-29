@@ -34,7 +34,7 @@ def _fake_questions_llm(*args, **kwargs):
     """Canned LLM response for question generation."""
     return json.dumps([
         {"type": "multiple_choice", "question": "Test Q?", "options": ["A", "B", "C"], "correct_answer": "A"},
-        {"type": "true_false", "question": "Is it true?", "correct_answer": "true"},
+        {"type": "options_choice", "question": "Is it true?", "correct_answer": "true"},
         {"type": "fill_blank", "question": "Fill the ___", "correct_answer": "blank"},
         {"type": "short_answer", "question": "What is the answer?", "correct_answer": "answer"},
     ])
@@ -210,7 +210,7 @@ class TestGameIntegration:
         next_resp = client.get(f"/game/{proj_name}/next")
         n_data = next_resp.get_json()
         pi, qi = n_data["para_idx"], n_data["q_idx"]
-        correct = state.paragraphs[pi].questions[qi].correct_answer
+        correct = state.paragraphs[pi].questions[qi].correct_answer[0]
         client.post(
             f"/game/{proj_name}/answer",
             data=json.dumps({"para_idx": pi, "q_idx": qi, "answer": correct}),

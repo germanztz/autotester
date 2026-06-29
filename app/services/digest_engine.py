@@ -7,6 +7,8 @@ for keyword extraction.
 from __future__ import annotations
 
 import json
+import random
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -334,6 +336,8 @@ class LazyAIManager:
         if self.game_manager is None:
             return
 
+        from app.models.game_state import QuestionRecord
+
         state = self.game_manager.load_state(project_name)
         if state is None:
             # Lazy-init the game state with the total chunk count
@@ -346,23 +350,79 @@ class LazyAIManager:
                 if q.id > max_id:
                     max_id = q.id
 
-        from app.models.game_state import QuestionRecord
+        questions: list[QuestionRecord] = []
 
-        question = QuestionRecord(
-            id=max_id + 1,
+        # 1. Reading Check
+        max_id += 1
+        questions.append(QuestionRecord(
+            id=max_id,
             title="Reading Check",
-            question_type="true_false",
-            question_text=(
-                f"Read the content we are going to study: {chunk_text}. "
-                "Did you read the paragraph?"
-            ),
-            correct_answer="true",
-        )
-        state.paragraphs[chunk_idx].questions = [question]
+            question_type="options_choice",
+            question_text=chunk_text,
+            options=["Ok, i read it", "not yet"],
+            correct_answer=["Ok, i read it"],
+            correct_to_master=1,
+        ))
+
+        # 2. Fill the Gap — one per keyword
+        all_chunks = self._load_chunks(project_name)
+        current_chunk = all_chunks[chunk_idx] if chunk_idx < len(all_chunks) else {}
+        keywords = current_chunk.get("text_keywords") or []
+
+        if keywords:
+            # Build a global keyword pool across all processed chunks for distractors
+            all_kw_pool: list[str] = []
+            seen: set[str] = set()
+            for ch in all_chunks:
+                for kw in ch.get("text_keywords") or []:
+                    lower = kw.lower()
+                    if lower not in seen:
+                        seen.add(lower)
+                        all_kw_pool.append(kw)
+
+            # Split chunk text into sentences by punctuation
+            sentences = [s.strip() for s in re.split(r'(?<=[.!?;])\s+', chunk_text.strip()) if s.strip()]
+            if not sentences:
+                sentences = [chunk_text.strip()]
+
+            for kw in keywords:
+                # Find first sentence containing this keyword (case insensitive)
+                target_sentence = None
+                for sent in sentences:
+                    if re.search(re.escape(kw), sent, re.IGNORECASE):
+                        target_sentence = sent
+                        break
+                if not target_sentence:
+                    continue
+
+                # Replace all occurrences of the keyword with ________
+                gap_text = re.sub(re.escape(kw), "________", target_sentence, flags=re.IGNORECASE)
+
+                # Build distractor pool (keywords other than this one)
+                distractor_pool = [w for w in all_kw_pool if w.lower() != kw.lower()]
+                if len(distractor_pool) >= 3:
+                    distractors = random.sample(distractor_pool, 3)
+                else:
+                    distractors = list(distractor_pool)
+                options = [kw] + distractors
+                random.shuffle(options)
+
+                max_id += 1
+                questions.append(QuestionRecord(
+                    id=max_id,
+                    title="Fill the Gap",
+                    question_type="fill_gap",
+                    question_text=gap_text,
+                    options=options,
+                    correct_answer=[kw],
+                    correct_to_master=0,
+                ))
+
+        state.paragraphs[chunk_idx].questions = questions
         self.game_manager.save_state(project_name, state)
         logger.debug(
-            "Generated question %d (true_false) for chunk %d of %s",
-            question.id, chunk_idx, project_name,
+            "Generated %d question(s) for chunk %d of %s",
+            len(questions), chunk_idx, project_name,
         )
 
     def _resolve_page_number(self, word_idx: int, page_ranges: list[tuple[int, int, int]]) -> int:

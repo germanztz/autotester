@@ -101,7 +101,17 @@ def rename(project_name: str):
 
 @files_bp.route("/<project_name>/delete", methods=["POST"])
 def delete(project_name: str):
-    """Delete a project directory."""
+    """Delete a project directory, cancelling any background jobs first."""
+    # Cancel any in-flight job or running digest before removing files.
+    job_runner = current_app.extensions.get("job_runner")
+    lazy_ai = current_app.extensions.get("lazy_ai_manager")
+    if job_runner:
+        job_id = job_runner.find_by_project(project_name)
+        if job_id:
+            job_runner.cancel(job_id)
+    if lazy_ai:
+        lazy_ai.cancel(project_name)
+
     file_manager = current_app.extensions["file_manager"]
     try:
         file_manager.delete_project(project_name)

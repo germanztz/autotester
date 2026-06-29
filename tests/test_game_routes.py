@@ -34,7 +34,7 @@ def _fake_questions(*args, **kwargs):
     """Replace LLM.generate() with a canned response."""
     return json.dumps([
         {"type": "multiple_choice", "question": "Test Q?", "options": ["A", "B", "C"], "correct_answer": "A"},
-        {"type": "true_false", "question": "Is it?", "correct_answer": "true"},
+        {"type": "options_choice", "question": "Is it?", "correct_answer": "true"},
         {"type": "fill_blank", "question": "Fill ___", "correct_answer": "blank"},
         {"type": "short_answer", "question": "Short?", "correct_answer": "answer"},
     ])
@@ -200,7 +200,7 @@ class TestHistory:
         assert entry["question_text"] == "Test Q?"
         assert entry["last_answer"] == "A"
         assert entry["last_answer_correct"] is True
-        assert entry["correct_answer"] == "A"
+        assert entry["correct_answer"] == ["A"]
 
     def test_history_empty_when_no_game(self, client, temp_workspace: dict):
         _make_project_with_chunks(temp_workspace["projects"], "nohist", 1)

@@ -48,12 +48,12 @@
     <div class="modal fade" id="renameModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
-                <form method="POST" id="renameForm">
-                    <div class="modal-header">
-                        <h5 class="modal-title"><i class="bi bi-pencil"></i> Project options</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil"></i> Project options</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form method="POST" id="renameForm">
                         <div class="mb-3">
                             <label class="form-label">Title</label>
                             <input type="text" class="form-control" name="title" id="renameInput" required>
@@ -62,24 +62,25 @@
                             <label class="form-label">Language</label>
                             <input type="text" class="form-control" name="language" id="languageInput" placeholder="e.g. en, es, fr, de...">
                         </div>
-                        <hr>
-                        <button type="button" class="btn btn-outline-danger btn-sm w-100 reset-progress-btn" data-project="">
-                            <i class="bi bi-arrow-counterclockwise"></i> Reset progress
-                        </button>
-                        <div class="mt-2">
-                            <form method="POST" id="deleteForm" class="d-inline w-100"
-                                  onsubmit="return confirm('Delete this project? All data will be lost.');">
-                                <button type="submit" class="btn btn-outline-danger btn-sm w-100">
-                                    <i class="bi bi-trash"></i> Delete project
-                                </button>
-                            </form>
-                        </div>
+                    </form>
+                    <hr>
+                    <button type="button" class="btn btn-outline-danger btn-sm w-100 reset-progress-btn" data-project="">
+                        <i class="bi bi-arrow-counterclockwise"></i> Reset progress
+                    </button>
+                    <div class="mt-2">
+                        <form method="POST" id="deleteForm" class="d-inline w-100"
+                              onsubmit="return confirm('Delete this project? All data will be lost.');"
+                              action="/files//delete">
+                            <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                                <i class="bi bi-trash"></i> Delete project
+                            </button>
+                        </form>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save</button>
-                    </div>
-                </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" form="renameForm" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save</button>
+                </div>
             </div>
         </div>
     </div>

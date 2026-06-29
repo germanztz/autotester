@@ -1,6 +1,8 @@
 """Game controller — quiz gameplay routes."""
 from __future__ import annotations
 
+import random
+
 from flask import Blueprint, current_app, jsonify, request
 
 from app.utils.logging_setup import get_logger
@@ -71,14 +73,15 @@ def next_question(project_name: str):
     question_data = {
         "para_idx": para_idx,
         "q_idx": q_idx,
+        "title": question.title,
         "type": question.question_type,
         "question": question.question_text,
         "progress_pct": engine.game_manager.calculate_progress(state),
     }
-    if question.question_type == "multiple_choice":
-        question_data["options"] = question.options
-    elif question.question_type == "true_false":
-        question_data["options"] = ["true", "false"]
+    if question.question_type in ("multiple_choice", "options_choice", "fill_gap"):
+        opts = list(question.options)
+        random.shuffle(opts)
+        question_data["options"] = opts
 
     return jsonify(question_data), 200
 

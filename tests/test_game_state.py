@@ -75,17 +75,17 @@ def sample_state() -> GameState:
                         question_type="multiple_choice",
                         question_text="Q1?",
                         options=["A", "B", "C"],
-                        correct_answer="A",
+                        correct_answer=["A"],
                     ),
                     QuestionRecord(
                         question_type="true_false",
                         question_text="Q2?",
-                        correct_answer="true",
+                        correct_answer=["true"],
                     ),
                     QuestionRecord(
                         question_type="fill_blank",
                         question_text="Q3 ___",
-                        correct_answer="answer",
+                        correct_answer=["answer"],
                     ),
                 ],
             ),
@@ -96,18 +96,18 @@ def sample_state() -> GameState:
                     QuestionRecord(
                         question_type="short_answer",
                         question_text="Q4?",
-                        correct_answer="response",
+                        correct_answer=["response"],
                     ),
                     QuestionRecord(
                         question_type="multiple_choice",
                         question_text="Q5?",
                         options=["X", "Y", "Z"],
-                        correct_answer="Y",
+                        correct_answer=["Y"],
                     ),
                     QuestionRecord(
                         question_type="true_false",
                         question_text="Q6?",
-                        correct_answer="false",
+                        correct_answer=["false"],
                     ),
                 ],
             ),
@@ -125,7 +125,7 @@ class TestQuestionRecord:
         q = QuestionRecord(
             question_type="multiple_choice",
             question_text="test?",
-            correct_answer="A",
+            correct_answer=["A"],
             correct_count=3,
         )
         assert q.is_mastered(3)
@@ -135,7 +135,7 @@ class TestQuestionRecord:
         q = QuestionRecord(
             question_type="true_false",
             question_text="Is this true?",
-            correct_answer="true",
+            correct_answer=["true"],
             correct_count=2,
             wrong_count=1,
             last_seen=100.0,
@@ -152,7 +152,7 @@ class TestQuestionRecord:
             title="Reading Check",
             question_type="true_false",
             question_text="Did you read?",
-            correct_answer="true",
+            correct_answer=["true"],
         )
         d = q.to_dict()
         assert d["id"] == 42
@@ -193,7 +193,7 @@ class TestParagraphState:
             unlocked=True,
             questions=[
                 QuestionRecord(
-                    question_type="mc", question_text="q1", correct_answer="A",
+                    question_type="mc", question_text="q1", correct_answer=["A"],
                     correct_count=1,
                 ),
                 QuestionRecord(
@@ -210,7 +210,7 @@ class TestParagraphState:
             unlocked=True,
             questions=[
                 QuestionRecord(
-                    question_type="mc", question_text="q1", correct_answer="A",
+                    question_type="mc", question_text="q1", correct_answer=["A"],
                     correct_count=1,
                 ),
                 QuestionRecord(
@@ -227,7 +227,7 @@ class TestParagraphState:
             unlocked=True,
             questions=[
                 QuestionRecord(
-                    question_type="mc", question_text="q1", correct_answer="A",
+                    question_type="mc", question_text="q1", correct_answer=["A"],
                     correct_count=3,
                 ),
                 QuestionRecord(
@@ -327,7 +327,7 @@ class TestHasUnprocessedParagraphs:
             project_name="test",
             paragraphs=[
                 ParagraphState(index=0, unlocked=True, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer="true"),
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"]),
                 ]),
                 ParagraphState(index=1, unlocked=False, questions=[]),
             ],
@@ -339,10 +339,10 @@ class TestHasUnprocessedParagraphs:
             project_name="test",
             paragraphs=[
                 ParagraphState(index=0, unlocked=True, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer="true"),
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"]),
                 ]),
                 ParagraphState(index=1, unlocked=False, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q2?", correct_answer="false"),
+                    QuestionRecord(question_type="true_false", question_text="Q2?", correct_answer=["false"]),
                 ]),
             ],
         )
@@ -353,10 +353,10 @@ class TestHasUnprocessedParagraphs:
             project_name="test",
             paragraphs=[
                 ParagraphState(index=0, unlocked=False, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer="true"),
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"]),
                 ]),
                 ParagraphState(index=1, unlocked=False, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q2?", correct_answer="false"),
+                    QuestionRecord(question_type="true_false", question_text="Q2?", correct_answer=["false"]),
                 ]),
             ],
         )
@@ -367,7 +367,7 @@ class TestHasUnprocessedParagraphs:
             project_name="test",
             paragraphs=[
                 ParagraphState(index=0, unlocked=True, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer="true"),
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"]),
                 ]),
                 ParagraphState(index=1, unlocked=True, questions=[]),
             ],
@@ -414,15 +414,15 @@ class TestStoreQuestions:
     def test_store_questions(self, manager: GameManager):
         manager.init_game("storetest", 2)
         questions = [
-            {"type": "multiple_choice", "question": "Test?", "options": ["A", "B"], "correct_answer": "A"},
-            {"type": "true_false", "question": "Is it?", "correct_answer": "true"},
+            {"type": "multiple_choice", "question": "Test?", "options": ["A", "B"], "correct_answer": ["A"]},
+            {"type": "options_choice", "question": "Is it?", "correct_answer": ["true"]},
         ]
         manager.store_questions("storetest", 0, questions)
         state = manager.load_state("storetest")
         assert state is not None
         assert len(state.paragraphs[0].questions) == 2
         assert state.paragraphs[0].questions[0].question_type == "multiple_choice"
-        assert state.paragraphs[0].questions[1].correct_answer == "true"
+        assert state.paragraphs[0].questions[1].correct_answer == ["true"]
 
 
 class TestResetGame:
