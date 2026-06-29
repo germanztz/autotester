@@ -20,26 +20,12 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="mainNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
-                            <i class="bi bi-file-earmark"></i> File
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li>
-                                <a class="dropdown-item upload-trigger" href="#">
-                                    <i class="bi bi-folder2-open"></i> Open...
-                                </a>
-                            </li>
-                        </ul>
-                    </li>
+                <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('config.show') }}">
-                            <i class="bi bi-gear"></i> Configuration
+                            <i class="bi bi-gear"></i>
                         </a>
                     </li>
-                </ul>
-                <ul class="navbar-nav ms-auto">
                 </ul>
             </div>
         </div>
@@ -75,6 +61,18 @@
                         <div class="mb-3">
                             <label class="form-label">Language</label>
                             <input type="text" class="form-control" name="language" id="languageInput" placeholder="e.g. en, es, fr, de...">
+                        </div>
+                        <hr>
+                        <button type="button" class="btn btn-outline-danger btn-sm w-100 reset-progress-btn" data-project="">
+                            <i class="bi bi-arrow-counterclockwise"></i> Reset progress
+                        </button>
+                        <div class="mt-2">
+                            <form method="POST" id="deleteForm" class="d-inline w-100"
+                                  onsubmit="return confirm('Delete this project? All data will be lost.');">
+                                <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                                    <i class="bi bi-trash"></i> Delete project
+                                </button>
+                            </form>
                         </div>
                     </div>
                     <div class="modal-footer">

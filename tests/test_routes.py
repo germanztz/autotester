@@ -76,3 +76,39 @@ class TestFilesRoute:
         response = client.get("/")
         assert response.status_code == 200
         assert b"myproj" in response.data
+
+
+class TestProjectsRoute:
+    def test_show_existing_project_returns_200(self, client, sample_pdf_bytes: bytes, temp_workspace: dict):
+        from app.models.file_manager import FileManager
+
+        fm = FileManager(temp_workspace["projects"])
+        fm.save_upload(io.BytesIO(sample_pdf_bytes), "f.pdf", "myproj")
+
+        response = client.get("/projects/myproj")
+        assert response.status_code == 200
+
+    def test_show_nonexistent_project_returns_404(self, client):
+        response = client.get("/projects/ghost")
+        assert response.status_code == 404
+
+    def test_show_project_renders_project_name(self, client, sample_pdf_bytes: bytes, temp_workspace: dict):
+        from app.models.file_manager import FileManager
+
+        fm = FileManager(temp_workspace["projects"])
+        fm.save_upload(io.BytesIO(sample_pdf_bytes), "f.pdf", "myproj")
+
+        response = client.get("/projects/myproj")
+        assert response.status_code == 200
+        assert b"myproj" in response.data
+
+    def test_show_project_includes_selected_project_script(self, client, sample_pdf_bytes: bytes, temp_workspace: dict):
+        from app.models.file_manager import FileManager
+
+        fm = FileManager(temp_workspace["projects"])
+        fm.save_upload(io.BytesIO(sample_pdf_bytes), "f.pdf", "myproj")
+
+        response = client.get("/projects/myproj")
+        assert response.status_code == 200
+        assert b"setSelectedProject" in response.data
+        assert b"myproj" in response.data

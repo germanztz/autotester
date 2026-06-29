@@ -40,9 +40,13 @@
             const titleInput = modal.querySelector("#renameInput");
             const languageInput = modal.querySelector("#languageInput");
             const form = modal.querySelector("#renameForm");
+            const resetBtn = modal.querySelector(".reset-progress-btn");
+            const deleteForm = modal.querySelector("#deleteForm");
             if (titleInput) titleInput.value = title;
             if (languageInput) languageInput.value = language;
             if (form) form.action = "/files/" + encodeURIComponent(project) + "/rename";
+            if (resetBtn) resetBtn.dataset.project = project;
+            if (deleteForm) deleteForm.action = "/files/" + encodeURIComponent(project) + "/delete";
         });
     }
 

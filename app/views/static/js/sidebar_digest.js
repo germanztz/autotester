@@ -60,14 +60,6 @@
 
     function selectProject(name) {
         if (selectedProject === name) {
-            // Toggle off when clicking the same project.
-            selectedProject = null;
-            document.querySelectorAll(".project-item").forEach(function (el) {
-                el.classList.remove("active");
-            });
-            if (window.QuizUI) {
-                QuizUI.deselectProject();
-            }
             return;
         }
         selectedProject = name;
@@ -82,6 +74,9 @@
             QuizUI.selectProject(name, display);
         }
     }
+
+    window.setSelectedProject = selectProject;
+    window.refreshSidebar = tick;
 
     function restoreSelection() {
         if (!selectedProject) return;
@@ -124,7 +119,9 @@
                 <div class="d-flex align-items-center">
                     <i class="bi ${icon} me-2"></i>
                     <div class="flex-grow-1 text-truncate" title="${escapeHtml(disp)}">
+                        <a href="/projects/${encodeURIComponent(p.name)}" class="text-decoration-none text-reset">
                         <div class="fw-semibold text-truncate">${escapeHtml(disp)}</div>
+                    </a>
                         <div class="small text-muted project-status ${errorClass}">${status}</div>
                         ${game_bar}
                     </div>
@@ -138,13 +135,6 @@
                                 title="Project options">
                             <i class="bi bi-pencil"></i>
                         </button>
-                        <form method="POST" action="/files/${encodeURIComponent(p.name)}/delete"
-                              class="d-inline"
-                              onsubmit="return confirm('Delete project ${escapeHtml(p.name)}?');">
-                            <button type="submit" class="btn btn-sm btn-link p-1 text-danger" title="Delete">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </form>
                     </div>
                 </div>
             </li>`;
@@ -195,7 +185,10 @@
             if (!item) return;
             // Ignore clicks on action buttons inside the item.
             if (e.target.closest(".project-actions")) return;
-            selectProject(item.dataset.projectName);
+            e.preventDefault();
+            var projectName = item.dataset.projectName;
+            if (selectedProject === projectName) return;
+            window.location.href = "/projects/" + encodeURIComponent(projectName);
         });
 
         // Bind cancel forms (when present) to a no-op AJAX handler that

@@ -11,3 +11,15 @@
     </div>
 </div>
 {% endblock %}
+
+{% block scripts %}
+{% if selected_project %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    if (window.setSelectedProject) {
+        window.setSelectedProject("{{ selected_project }}");
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

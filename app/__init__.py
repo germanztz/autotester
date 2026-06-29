@@ -147,11 +147,13 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     from app.controllers.config_controller import config_bp
     from app.controllers.ai_controller import ai_bp
     from app.controllers.game_controller import game_bp
+    from app.controllers.projects_controller import projects_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(files_bp, url_prefix="/files")
     app.register_blueprint(config_bp, url_prefix="/config")
     app.register_blueprint(ai_bp, url_prefix="/ai")
     app.register_blueprint(game_bp)
+    app.register_blueprint(projects_bp, url_prefix="/projects")
 
     return app

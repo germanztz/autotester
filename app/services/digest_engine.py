@@ -251,6 +251,13 @@ class LazyAIManager:
             return "", ""
 
         result = raw.strip().strip('"').strip("'").strip()
+        if result.startswith("```"):
+            first_nl = result.find("\n")
+            if first_nl != -1:
+                result = result[first_nl + 1:]
+            if result.endswith("```"):
+                result = result[:-3].rstrip()
+        result = result.strip()
         title = ""
         language = ""
         try:

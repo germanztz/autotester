@@ -32,21 +32,12 @@
         document.getElementById("panel-content").innerHTML =
             '<div class="card shadow-sm mt-3">' +
             '<div class="card-body">' +
-            '<h6 class="card-title mb-3">Progress</h6>' +
-            '<div class="progress mb-4" style="height: 24px;">' +
-            '<div class="progress-bar progress-bar-striped" role="progressbar" ' +
-            'style="width: ' + pct + '%;" aria-valuenow="' + pct + '" ' +
-            'aria-valuemin="0" aria-valuemax="100">' + pct + '%</div>' +
-            "</div>" +
+
             '<div id="quiz-area">' +
             '<div class="text-center py-4">' +
             '<button class="btn btn-primary btn-lg" id="startGameBtn">' +
             '<i class="bi bi-play-fill"></i> Start Game</button>' +
             "</div>" +
-            "</div>" +
-            '<div class="mt-3">' +
-            '<button class="btn btn-outline-danger btn-sm" id="resetGameBtn">' +
-            '<i class="bi bi-arrow-counterclockwise"></i> Reset progress</button>' +
             "</div>" +
             "</div></div>";
     }
@@ -234,7 +225,7 @@
                 console.error("Answer error:", data.error);
                 return;
             }
-            updateProgressBar(data.progress_pct);
+            if (window.refreshSidebar) window.refreshSidebar();
             renderFeedback(data.correct, data.correct_answer, data.just_mastered);
         });
     }
@@ -353,15 +344,19 @@
                 return;
             }
 
-            // Reset game
-            if (target.id === "resetGameBtn" || target.closest("#resetGameBtn")) {
+            // Reset game from project options modal
+            var modalResetBtn = target.closest(".reset-progress-btn");
+            if (modalResetBtn) {
                 e.preventDefault();
-                if (currentProject) {
-                    var displayName = document.querySelector(
-                        '#project-list [data-project-name="' + CSS.escape(currentProject) + '"]'
-                    );
-                    var disp = displayName ? (displayName.dataset.digestTitle || currentProject) : currentProject;
-                    resetGame(currentProject, disp);
+                var proj = modalResetBtn.dataset.project;
+                if (proj && confirm("Reset game progress for this project? All progress will be lost.")) {
+                    apiCall("POST", "/game/" + encodeURIComponent(proj) + "/reset", null, function (data) {
+                        if (data.status === "reset") {
+                            if (window.refreshSidebar) window.refreshSidebar();
+                            var m = bootstrap.Modal.getInstance(document.getElementById("renameModal"));
+                            if (m) m.hide();
+                        }
+                    });
                 }
                 return;
             }

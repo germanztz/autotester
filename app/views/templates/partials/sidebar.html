@@ -27,7 +27,9 @@
                         <i class="bi bi-hourglass-split text-primary me-2"></i>
                     {% endif %}
                     <div class="flex-grow-1 text-truncate" title="{{ project.digest_title or project.name }}">
-                        <div class="fw-semibold text-truncate">{{ project.digest_title or project.name }}</div>
+                        <a href="{{ url_for('projects.show', project_name=project.name) }}" class="text-decoration-none text-reset">
+                            <div class="fw-semibold text-truncate">{{ project.digest_title or project.name }}</div>
+                        </a>
                         <div class="small text-muted project-status">
                             {% if project.digest_state == 'complete' %}
                                 {{ project.digest_total_keywords }} keywords
@@ -61,17 +63,10 @@
                                 data-bs-toggle="modal" data-bs-target="#renameModal"
                                 data-project="{{ project.name }}"
                                 data-digest-title="{{ project.digest_title or project.name }}"
-                                data-digest-language="{{ project.digest_language }}"
+                                data-digest-language="{{ project.digest_language or '' }}"
                                 title="Project options">
                             <i class="bi bi-pencil"></i>
                         </button>
-                        <form method="POST" action="{{ url_for('files.delete', project_name=project.name) }}"
-                              class="d-inline"
-                              onsubmit="return confirm('Delete project {{ project.name }}?');">
-                            <button type="submit" class="btn btn-sm btn-link p-1 text-danger" title="Delete">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </form>
                     </div>
                 </div>
             </li>
