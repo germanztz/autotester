@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 {% block title %}autotester{% endblock %}
 {% block content %}
-<h1 class="h3 mb-0" id="panel-title"><i class="bi bi-robot"></i> autotester</h1>
-<div id="panel-content">
-    <div class="card shadow-sm mt-3">
-        <div class="card-body text-center text-muted py-5">
+<div class="d-flex flex-column" id="panel-wrapper">
+    <h1 class="h3 mb-0" id="panel-title"><i class="bi bi-robot"></i> autotester</h1>
+    <div id="chat-messages" class="flex-grow-1" role="log" aria-live="polite">
+        <div class="text-center text-muted py-5" id="welcome-placeholder">
             <i class="bi bi-folder2-open d-block fs-1 mb-3"></i>
             <p class="mb-0">Select a project from the sidebar to view details.</p>
         </div>
+    </div>
+    <div id="chat-input-bar" class="chat-input-bar d-none">
+        <div id="chat-input-inner" class="d-flex gap-2"></div>
     </div>
 </div>
 {% endblock %}

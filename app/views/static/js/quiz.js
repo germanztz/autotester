@@ -3,8 +3,11 @@
 
     var POLL_INTERVAL_MS = 2000;
     var currentProject = null;
+    var currentDisplayName = null;
     var currentQuestion = null;
     var pollTimer = null;
+    var autoAdvanceTimer = null;
+    var isProcessing = false;
 
     function escapeHtml(s) {
         return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -12,157 +15,255 @@
         });
     }
 
-    // ----- Panel renderers -----
+    function $(id) {
+        return document.getElementById(id);
+    }
+
+    function chatScrollDown() {
+        var cm = $("chat-messages");
+        if (cm) cm.scrollTop = cm.scrollHeight;
+    }
+
+    // ----- Bubble rendering -----
+
+    function addBubble(role, html) {
+        var cm = $("chat-messages");
+        if (!cm) return null;
+        var div = document.createElement("div");
+        div.className = "chat-bubble " + role;
+        div.innerHTML = html;
+        cm.appendChild(div);
+        chatScrollDown();
+        return div;
+    }
+
+    function showTyping() {
+        hideTyping();
+        var cm = $("chat-messages");
+        if (!cm) return;
+        var div = document.createElement("div");
+        div.className = "chat-typing";
+        div.id = "chatTypingIndicator";
+        div.innerHTML =
+            '<span class="small text-muted me-1">Thinking</span>' +
+            '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+        cm.appendChild(div);
+        chatScrollDown();
+    }
+
+    function hideTyping() {
+        var el = $("chatTypingIndicator");
+        if (el) el.remove();
+    }
+
+    // ----- Input bar -----
+
+    function renderMCInput(options) {
+        var inner = $("chat-input-inner");
+        if (!inner) return;
+        inner.innerHTML = options.map(function (opt) {
+            return '<button class="btn btn-outline-primary chat-option-btn" data-answer="' + escapeHtml(opt) + '">' + escapeHtml(opt) + "</button>";
+        }).join("");
+    }
+
+    function renderTFInput() {
+        var inner = $("chat-input-inner");
+        if (!inner) return;
+        inner.innerHTML =
+            '<button class="btn btn-outline-primary chat-option-btn" data-answer="true">True</button>' +
+            '<button class="btn btn-outline-primary chat-option-btn" data-answer="false">False</button>';
+    }
+
+    function renderTextInput(placeholder) {
+        var inner = $("chat-input-inner");
+        if (!inner) return;
+        inner.innerHTML =
+            '<input type="text" class="form-control chat-text-input" id="chatTextInput" placeholder="' + escapeHtml(placeholder) + '" autocomplete="off">' +
+            '<button class="btn btn-primary chat-text-submit" id="chatTextSubmit">Submit</button>';
+        var inp = $("chatTextInput");
+        if (inp) inp.focus();
+    }
+
+    function disableInput() {
+        var inner = $("chat-input-inner");
+        if (!inner) return;
+        inner.querySelectorAll("button, input").forEach(function (el) {
+            el.disabled = true;
+        });
+    }
+
+    function renderInput(type, options) {
+        var bar = $("chat-input-bar");
+        if (!bar) return;
+        bar.classList.remove("d-none");
+        if (type === "multiple_choice") {
+            renderMCInput(options);
+        } else if (type === "true_false") {
+            renderTFInput();
+        } else if (type === "fill_blank") {
+            renderTextInput("Type your answer...");
+        } else if (type === "short_answer") {
+            renderTextInput("Type your answer (1-3 words)...");
+        }
+    }
+
+    function hideInput() {
+        var bar = $("chat-input-bar");
+        if (bar) bar.classList.add("d-none");
+    }
+
+    // ----- Welcome / Starting view -----
 
     function renderWelcome() {
-        document.getElementById("panel-title").innerHTML =
-            '<i class="bi bi-robot"></i> autotester';
-        document.getElementById("panel-content").innerHTML =
-            '<div class="card shadow-sm mt-3">' +
-            '<div class="card-body text-center text-muted py-5">' +
+        hideInput();
+        var cm = $("chat-messages");
+        if (!cm) return;
+        $("panel-title").innerHTML = '<i class="bi bi-robot"></i> autotester';
+        cm.innerHTML =
+            '<div class="text-center text-muted py-5" id="welcome-placeholder">' +
             '<i class="bi bi-folder2-open d-block fs-1 mb-3"></i>' +
             '<p class="mb-0">Select a project from the sidebar to view details.</p>' +
-            "</div></div>";
+            "</div>";
     }
 
-    function renderStartingView(projectName, displayName, progressPct) {
-        var pct = Math.round(progressPct || 0);
-        document.getElementById("panel-title").innerHTML =
+    function renderStartView(projectName, displayName) {
+        $("panel-title").innerHTML =
             '<i class="bi bi-file-earmark-text"></i> ' + escapeHtml(displayName);
-        document.getElementById("panel-content").innerHTML =
-            '<div class="card shadow-sm mt-3">' +
-            '<div class="card-body">' +
-
-            '<div id="quiz-area">' +
-            '<div class="text-center py-4">' +
-            '<button class="btn btn-primary btn-lg" id="startGameBtn">' +
-            '<i class="bi bi-play-fill"></i> Start Game</button>' +
-            "</div>" +
-            "</div>" +
-            "</div></div>";
+        var cm = $("chat-messages");
+        if (cm) cm.innerHTML = "";
+        hideInput();
+        addBubble("bot",
+            '<p class="mb-2">Ready to test your knowledge on <strong>' + escapeHtml(displayName) + '</strong>?</p>' +
+            '<button class="btn btn-primary" id="startGameBtn">' +
+            '<i class="bi bi-play-fill"></i> Start Game</button>'
+        );
     }
 
-    function renderGenerating() {
-        var area = document.getElementById("quiz-area");
-        if (!area) return;
-        area.innerHTML =
-            '<div class="text-center py-4">' +
-            '<div class="spinner-border text-primary mb-3" role="status">' +
-            '<span class="visually-hidden">Generating...</span></div>' +
-            '<p class="text-muted">Generating questions from your document...</p>' +
-            "</div>";
+    function renderCompleteContent(stats) {
+        hideInput();
+        addBubble("bot",
+            '<div class="text-center py-2">' +
+            '<i class="bi bi-trophy-fill text-warning d-block fs-1 mb-2"></i>' +
+            '<h5 class="mb-2">Congratulations!</h5>' +
+            '<p class="mb-1 text-muted">You have mastered all questions!</p>' +
+            '<p class="small text-muted">' +
+            "Correct: " + (stats.total_correct || 0) +
+            " | Mastered: " + (stats.mastered_questions || 0) +
+            "</p>" +
+            '<button class="btn btn-outline-primary mt-1" id="playAgainBtn">' +
+            '<i class="bi bi-arrow-counterclockwise"></i> Play Again</button>' +
+            "</div>"
+        );
     }
 
-    function renderQuestion(question) {
-        currentQuestion = question;
-        var area = document.getElementById("quiz-area");
-        if (!area) return;
+    // ----- Question / Answer flow -----
 
-        var optionsHtml = "";
-        if (question.type === "multiple_choice" && question.options) {
-            optionsHtml = question.options.map(function (opt, i) {
-                return '<button class="list-group-item list-group-item-action quiz-option" data-answer="' + escapeHtml(opt) + '">' +
-                    escapeHtml(opt) + "</button>";
-            }).join("");
-            optionsHtml = '<div class="list-group mt-3">' + optionsHtml + "</div>";
-        } else if (question.type === "true_false") {
-            optionsHtml =
-                '<div class="list-group mt-3">' +
-                '<button class="list-group-item list-group-item-action quiz-option" data-answer="true">True</button>' +
-                '<button class="list-group-item list-group-item-action quiz-option" data-answer="false">False</button>' +
-                "</div>";
-        } else if (question.type === "fill_blank") {
-            optionsHtml =
-                '<div class="input-group mt-3">' +
-                '<input type="text" class="form-control" id="quizTextInput" placeholder="Type your answer..." autocomplete="off">' +
-                '<button class="btn btn-primary" id="quizSubmitText">Submit</button>' +
-                "</div>";
-        } else if (question.type === "short_answer") {
-            optionsHtml =
-                '<div class="input-group mt-3">' +
-                '<input type="text" class="form-control" id="quizTextInput" placeholder="Type your answer (1-3 words)..." autocomplete="off">' +
-                '<button class="btn btn-primary" id="quizSubmitText">Submit</button>' +
-                "</div>";
-        }
-
-        area.innerHTML =
-            '<div class="quiz-question mt-3">' +
-            '<div class="card">' +
-            '<div class="card-body">' +
-            '<p class="card-text fs-5">' + escapeHtml(question.question) + "</p>" +
-            optionsHtml +
-            '<div id="quizFeedback" class="mt-3"></div>' +
-            "</div></div>" +
-            '<div class="d-none mt-3" id="quizNextContainer">' +
-            '<button class="btn btn-success" id="quizNextBtn">' +
-            '<i class="bi bi-arrow-right"></i> Next</button>' +
-            "</div>";
+    function renderQuestion(q) {
+        currentQuestion = q;
+        addBubble("bot", "<strong>" + escapeHtml(q.question) + "</strong>");
+        renderInput(q.type, q.options);
     }
 
     function renderFeedback(correct, correctAnswer, isMastered) {
-        var fb = document.getElementById("quizFeedback");
-        if (!fb) return;
-        var cls = correct ? "alert-success" : "alert-danger";
+        var cls = correct ? "correct" : "incorrect";
         var icon = correct ? "bi-check-circle-fill" : "bi-x-circle-fill";
         var msg = correct
-            ? (isMastered ? "Correct! Question mastered! " : "Correct! ")
+            ? (isMastered ? "Correct! Question mastered!" : "Correct!")
             : "Incorrect. Correct answer: " + escapeHtml(correctAnswer);
-        fb.innerHTML =
-            '<div class="alert ' + cls + ' d-flex align-items-center" role="alert">' +
-            '<i class="bi ' + icon + ' me-2 fs-5"></i>' +
-            '<span>' + msg + "</span></div>";
+        var bubble = addBubble("feedback", '<i class="bi ' + icon + ' feedback-icon"></i> ' + msg);
+        if (bubble) bubble.classList.add(cls);
+    }
 
-        // Disable option buttons
-        document.querySelectorAll(".quiz-option").forEach(function (btn) {
-            btn.disabled = true;
-            btn.classList.remove("active");
-            if (btn.getAttribute("data-answer") === correctAnswer) {
-                btn.classList.add("list-group-item-success");
+    function submitAnswer(projectName, answer) {
+        if (!currentQuestion || isProcessing) return;
+        isProcessing = true;
+        disableInput();
+        addBubble("user", escapeHtml(answer));
+        apiCall("POST", "/game/" + encodeURIComponent(projectName) + "/answer", {
+            para_idx: currentQuestion.para_idx,
+            q_idx: currentQuestion.q_idx,
+            answer: answer,
+        }, function (data) {
+            if (data.error) {
+                console.error("Answer error:", data.error);
+                isProcessing = false;
+                return;
+            }
+            if (window.refreshSidebar) window.refreshSidebar();
+            renderFeedback(data.correct, data.correct_answer, data.just_mastered);
+            var delay = data.correct ? 1500 : 2000;
+            autoAdvanceTimer = setTimeout(function () {
+                autoAdvanceTimer = null;
+                loadNextQuestion(projectName);
+            }, delay);
+        });
+    }
+
+    function loadNextQuestion(projectName) {
+        hideTyping();
+        isProcessing = false;
+        showTyping();
+        apiCall("GET", "/game/" + encodeURIComponent(projectName) + "/next", null, function (data) {
+            hideTyping();
+            if (data.status === "complete") {
+                renderCompleteContent(data);
+                return;
+            }
+            if (data.status === "generating" || data.status === "waiting") {
+                showTyping();
+                pollGameStatus(projectName);
+                return;
+            }
+            if (data.question) {
+                renderQuestion(data);
             }
         });
-
-        // Show next button
-        document.getElementById("quizNextContainer").classList.remove("d-none");
     }
 
-    function renderWaiting() {
-        var area = document.getElementById("quiz-area");
-        if (!area) return;
-        area.innerHTML =
-            '<div class="text-center py-4">' +
-            '<div class="spinner-border text-info mb-3" role="status">' +
-            '<span class="visually-hidden">Waiting...</span></div>' +
-            '<p class="text-muted">More questions are being generated from your document...</p>' +
-            "</div>";
+    function startGame(projectName) {
+        hideInput();
+        showTyping();
+        apiCall("POST", "/game/" + encodeURIComponent(projectName) + "/start", null, function (data) {
+            if (data.status === "ready") {
+                loadNextQuestion(projectName);
+            } else {
+                pollGameStatus(projectName);
+            }
+        });
     }
 
-    function renderComplete(stats) {
-        var area = document.getElementById("quiz-area");
-        if (!area) return;
-        area.innerHTML =
-            '<div class="text-center py-5">' +
-            '<i class="bi bi-trophy-fill text-warning display-1 mb-3"></i>' +
-            '<h3 class="mb-3">Congratulations!</h3>' +
-            '<p class="text-muted mb-1">You have mastered all questions!</p>' +
-            '<p class="text-muted">' +
-            'Total correct: ' + (stats.total_correct || 0) +
-            ' | Mastered: ' + (stats.mastered_questions || 0) +
-            "</p>" +
-            '<button class="btn btn-outline-primary mt-2" id="resetGameBtn">' +
-            '<i class="bi bi-arrow-counterclockwise"></i> Play Again</button>' +
-            "</div>";
+    // ----- Polling -----
+
+    function pollGameStatus(projectName) {
+        if (pollTimer) clearTimeout(pollTimer);
+        apiCall("GET", "/game/" + encodeURIComponent(projectName) + "/status", null, function (data) {
+            if (data.status === "playing" || data.status === "ready") {
+                loadNextQuestion(projectName);
+                return;
+            }
+            if (data.status === "waiting") {
+                pollTimer = setTimeout(function () {
+                    pollGameStatus(projectName);
+                }, POLL_INTERVAL_MS);
+                return;
+            }
+            pollTimer = setTimeout(function () {
+                pollGameStatus(projectName);
+            }, POLL_INTERVAL_MS);
+        });
     }
 
-    function updateProgressBar(pct) {
-        var bar = document.querySelector(".progress-bar");
-        if (!bar) return;
-        var rounded = Math.round(pct);
-        bar.style.width = rounded + "%";
-        bar.textContent = rounded + "%";
-        bar.setAttribute("aria-valuenow", rounded);
+    function resetGame(projectName) {
+        if (!confirm("Reset game progress? All progress will be lost.")) return;
+        apiCall("POST", "/game/" + encodeURIComponent(projectName) + "/reset", null, function (data) {
+            if (data.status === "reset") {
+                if (window.refreshSidebar) window.refreshSidebar();
+                renderStartView(projectName, currentDisplayName);
+            }
+        });
     }
 
-    // ----- API calls -----
+    // ----- API helper -----
 
     function apiCall(method, path, body, callback) {
         var opts = {
@@ -181,126 +282,65 @@
             });
     }
 
-    function startGame(projectName) {
-        apiCall("POST", "/game/" + encodeURIComponent(projectName) + "/start", null, function (data) {
-            if (data.status === "ready") {
-                loadNextQuestion(projectName);
-            } else {
-                renderGenerating();
-                pollGameStatus(projectName);
-            }
-        });
-    }
-
-    function loadNextQuestion(projectName) {
-        apiCall("GET", "/game/" + encodeURIComponent(projectName) + "/next", null, function (data) {
-            if (data.status === "complete") {
-                renderComplete(data);
-                return;
-            }
-            if (data.status === "generating") {
-                renderGenerating();
-                pollGameStatus(projectName);
-                return;
-            }
-            if (data.status === "waiting") {
-                renderWaiting();
-                pollGameStatus(projectName);
-                return;
-            }
-            if (data.question) {
-                renderQuestion(data);
-            }
-        });
-    }
-
-    function submitAnswer(projectName, answer) {
-        if (!currentQuestion) return;
-        apiCall("POST", "/game/" + encodeURIComponent(projectName) + "/answer", {
-            para_idx: currentQuestion.para_idx,
-            q_idx: currentQuestion.q_idx,
-            answer: answer,
-        }, function (data) {
-            if (data.error) {
-                console.error("Answer error:", data.error);
-                return;
-            }
-            if (window.refreshSidebar) window.refreshSidebar();
-            renderFeedback(data.correct, data.correct_answer, data.just_mastered);
-        });
-    }
-
-    function pollGameStatus(projectName) {
-        if (pollTimer) clearTimeout(pollTimer);
-        apiCall("GET", "/game/" + encodeURIComponent(projectName) + "/status", null, function (data) {
-            if (data.status === "playing") {
-                loadNextQuestion(projectName);
-                return;
-            }
-            if (data.status === "ready") {
-                loadNextQuestion(projectName);
-                return;
-            }
-            if (data.status === "waiting") {
-                // Digest still processing — keep polling
-                pollTimer = setTimeout(function () {
-                    pollGameStatus(projectName);
-                }, POLL_INTERVAL_MS);
-                return;
-            }
-            // Still generating or other — poll again
-            pollTimer = setTimeout(function () {
-                pollGameStatus(projectName);
-            }, POLL_INTERVAL_MS);
-        });
-    }
-
-    function resetGame(projectName, displayName) {
-        if (!confirm("Reset game progress? All progress will be lost.")) return;
-        apiCall("POST", "/game/" + encodeURIComponent(projectName) + "/reset", null, function (data) {
-            if (data.status === "reset") {
-                renderStartingView(projectName, displayName, 0);
-            }
-        });
-    }
-
     // ----- Public API -----
 
     window.QuizUI = {
         selectProject: function (projectName, displayName) {
             currentProject = projectName;
+            currentDisplayName = displayName;
             currentQuestion = null;
+            isProcessing = false;
             if (pollTimer) {
                 clearTimeout(pollTimer);
                 pollTimer = null;
             }
+            if (autoAdvanceTimer) {
+                clearTimeout(autoAdvanceTimer);
+                autoAdvanceTimer = null;
+            }
+
+            $("panel-title").innerHTML =
+                '<i class="bi bi-file-earmark-text"></i> ' + escapeHtml(displayName);
+            var cm = $("chat-messages");
+            if (cm) cm.innerHTML = "";
+            hideInput();
 
             apiCall("GET", "/game/" + encodeURIComponent(projectName) + "/status", null, function (data) {
-                var pct = data.progress_pct || 0;
                 if (data.status === "not_started") {
-                    renderStartingView(projectName, displayName, 0);
+                    renderStartView(projectName, displayName);
                 } else if (data.status === "generating") {
-                    renderStartingView(projectName, displayName, pct);
-                    renderGenerating();
+                    showTyping();
                     pollGameStatus(projectName);
                 } else if (data.status === "playing" || data.status === "waiting") {
-                    renderStartingView(projectName, displayName, pct);
+                    if (data.total_questions > 0) {
+                        addBubble("bot",
+                            'Resuming &mdash; you\'ve answered <strong>' +
+                            (data.total_correct || 0) + "/" + (data.total_possible || 0) +
+                            "</strong> (" + Math.round(data.progress_pct || 0) + "%), " +
+                            (data.mastered_questions || 0) + " mastered."
+                        );
+                    }
                     loadNextQuestion(projectName);
                 } else if (data.status === "complete") {
-                    renderStartingView(projectName, displayName, 100);
-                    renderComplete(data);
+                    renderCompleteContent(data);
                 } else {
-                    renderStartingView(projectName, displayName, 0);
+                    renderStartView(projectName, displayName);
                 }
             });
         },
 
         deselectProject: function () {
             currentProject = null;
+            currentDisplayName = null;
             currentQuestion = null;
+            isProcessing = false;
             if (pollTimer) {
                 clearTimeout(pollTimer);
                 pollTimer = null;
+            }
+            if (autoAdvanceTimer) {
+                clearTimeout(autoAdvanceTimer);
+                autoAdvanceTimer = null;
             }
             renderWelcome();
         },
@@ -312,39 +352,34 @@
         document.body.addEventListener("click", function (e) {
             var target = e.target;
 
-            // Start game
             if (target.id === "startGameBtn" || target.closest("#startGameBtn")) {
                 e.preventDefault();
                 if (currentProject) startGame(currentProject);
                 return;
             }
 
-            // Quiz option (multiple choice / true-false)
-            var option = target.closest(".quiz-option");
-            if (option && currentProject && currentQuestion) {
+            if (target.id === "playAgainBtn" || target.closest("#playAgainBtn")) {
                 e.preventDefault();
-                submitAnswer(currentProject, option.getAttribute("data-answer"));
+                if (currentProject) resetGame(currentProject);
                 return;
             }
 
-            // Submit text answer (fill_blank / short_answer)
-            if (target.id === "quizSubmitText" || target.closest("#quizSubmitText")) {
+            var optBtn = target.closest(".chat-option-btn");
+            if (optBtn && currentProject && currentQuestion && !optBtn.disabled) {
                 e.preventDefault();
-                var input = document.getElementById("quizTextInput");
-                if (input && input.value.trim() && currentProject && currentQuestion) {
+                submitAnswer(currentProject, optBtn.getAttribute("data-answer"));
+                return;
+            }
+
+            if (target.id === "chatTextSubmit" || target.closest("#chatTextSubmit")) {
+                e.preventDefault();
+                var input = $("chatTextInput");
+                if (input && input.value.trim() && currentProject && currentQuestion && !isProcessing) {
                     submitAnswer(currentProject, input.value.trim());
                 }
                 return;
             }
 
-            // Next question
-            if (target.id === "quizNextBtn" || target.closest("#quizNextBtn")) {
-                e.preventDefault();
-                if (currentProject) loadNextQuestion(currentProject);
-                return;
-            }
-
-            // Reset game from project options modal
             var modalResetBtn = target.closest(".reset-progress-btn");
             if (modalResetBtn) {
                 e.preventDefault();
@@ -362,11 +397,10 @@
             }
         });
 
-        // Press Enter in text input to submit
         document.body.addEventListener("keydown", function (e) {
             if (e.key === "Enter") {
-                var input = document.getElementById("quizTextInput");
-                if (input && document.activeElement === input && currentProject && currentQuestion) {
+                var input = $("chatTextInput");
+                if (input && document.activeElement === input && currentProject && currentQuestion && !isProcessing) {
                     e.preventDefault();
                     submitAnswer(currentProject, input.value.trim());
                 }
