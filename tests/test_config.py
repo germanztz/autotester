@@ -139,11 +139,13 @@ class TestIAQuestionTrueFalsePrompt:
                 "chunk_overlap": 10,
                 "system_prompt": "a",
                 "user_prompt_tpl": "a {text}",
+                "title_user_prompt_tpl": "a {text}",
                 "question_true_false_user_prompt_tpl": "",
+                "question_mixed_user_prompt_tpl": "a {count} {language} {keywords} {text}",
             })
 
     def test_validate_ia_rejects_missing_text_placeholder(self):
-        with pytest.raises(ValueError, match="{text}"):
+        with pytest.raises(ValueError, match=r"question_true_false.*{text}"):
             _validate_ia({
                 "ollama_url": "http://dummy-server",
                 "ollama_model": "dummy-model",
@@ -151,7 +153,9 @@ class TestIAQuestionTrueFalsePrompt:
                 "chunk_overlap": 10,
                 "system_prompt": "a",
                 "user_prompt_tpl": "a {text}",
+                "title_user_prompt_tpl": "a {text}",
                 "question_true_false_user_prompt_tpl": "no placeholder {keyword} {target_response} {language}",
+                "question_mixed_user_prompt_tpl": "a {count} {language} {keywords} {text}",
             })
 
     def test_validate_ia_accepts_valid_true_false_prompt(self):
@@ -162,7 +166,9 @@ class TestIAQuestionTrueFalsePrompt:
             "chunk_overlap": 10,
             "system_prompt": "a",
             "user_prompt_tpl": "a {text}",
+            "title_user_prompt_tpl": "a {text}",
             "question_true_false_user_prompt_tpl": "valid {text} {keyword} {target_response} {language}",
+            "question_mixed_user_prompt_tpl": "a {count} {language} {keywords} {text}",
         })
 
     def test_update_ia_persists_true_false_prompt(self, temp_workspace: dict):
@@ -180,7 +186,9 @@ class TestIAQuestionTrueFalsePrompt:
             "chunk_overlap": 10,
             "system_prompt": "sp",
             "user_prompt_tpl": "up {text}",
+            "title_user_prompt_tpl": "tup {text}",
             "question_true_false_user_prompt_tpl": "tf {text} {keyword} {target_response} {language}",
+            "question_mixed_user_prompt_tpl": "qm {count} {language} {keywords} {text}",
             "log_level": "INFO",
         }, follow_redirects=True)
         assert resp.status_code == 200

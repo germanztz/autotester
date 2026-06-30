@@ -5,38 +5,14 @@ import json
 import time
 from typing import Any, Optional
 
-from app.models.config_manager import _DEFAULT_SYSTEM_PROMPT
+from app.models.config_manager import (
+    _DEFAULT_SYSTEM_PROMPT,
+    _DEFAULT_QUESTION_MIXED_USER_PROMPT_TPL,
+    _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL,
+)
 from app.utils.logging_setup import get_logger
 
 logger = get_logger()
-
-_TRUE_FALSE_USER_PROMPT_TPL = (
-    'Generate a true/false question in {language} based on the following text. '
-    'The question must target the keyword "{keyword}" and the correct answer '
-    'must be "{target_response}". '
-    'Do NOT copy phrases from the original text - rephrase the concept in your own words. '
-    'Return ONLY valid JSON conforming to this schema (no markdown, no extra text):\n'
-    '{{"type": "true_false", "question": "your rephrased statement here", "correct_answer": "{target_response}"}}\n\n'
-    'Text:\n{text}'
-)
-
-_QUESTION_USER_PROMPT_TPL = (
-    "Based on the following text and its keywords, create {count} questions "
-    "in {language} to help memorize the content. "
-    "Use a mix of question types:\n"
-    '- "multiple_choice": question with 4 options, one correct\n'
-    '- "options_choice": question with several options to choose from\n'
-    '- "fill_blank": sentence with a missing word (use ___ for the blank)\n'
-    '- "short_answer": question answerable in 1-3 words\n\n'
-    "Keywords: {keywords}\n\n"
-    "Text:\n{text}\n\n"
-    "Return ONLY valid JSON — an array of objects conforming to this schema:\n"
-    '{{"type": "multiple_choice"|"options_choice"|"fill_blank"|"short_answer", '
-    '"question": "string", '
-    '"options": ["string", ...], '
-    '"correct_answer": "string"}}\n'
-    'The "options" field is required only for type "multiple_choice".\n'
-)
 
 _MAX_RETRIES = 3
 _RETRY_DELAY_SECONDS = 1.0
@@ -77,7 +53,12 @@ class QuestionGenerator:
             ia_cfg = cfg.get("ia", {})
             model = ia_cfg.get("ollama_model", None)
 
-        prompt = _QUESTION_USER_PROMPT_TPL.format(
+        cfg = self.config_manager.load()
+        tpl = cfg.get("ia", {}).get(
+            "question_mixed_user_prompt_tpl",
+            _DEFAULT_QUESTION_MIXED_USER_PROMPT_TPL,
+        )
+        prompt = tpl.format(
             count=count,
             language=language,
             keywords=", ".join(keywords),
@@ -155,7 +136,7 @@ class QuestionGenerator:
         cfg = self.config_manager.load()
         tpl = cfg.get("ia", {}).get(
             "question_true_false_user_prompt_tpl",
-            _TRUE_FALSE_USER_PROMPT_TPL,
+            _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL,
         )
 
         questions: list[dict[str, Any]] = []

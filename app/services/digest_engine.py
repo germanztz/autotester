@@ -239,14 +239,8 @@ class LazyAIManager:
         settings = self.segmenter._get_ia_settings()
         model = settings["ollama_model"]
         system_prompt = settings["system_prompt"]
-        prompt = (
-            "Based on the following text, generate a short title of 1 to 7 words "
-            "that represents the project and detect the language of the text.\n"
-            'Return ONLY valid JSON conforming to this schema:\n'
-            '{{"title": "short descriptive title (may include emojis)", '
-            '"language": "ISO 639-1 code (e.g., en, es, fr, de, pt, it)"}}\n\n'
-            f"{first_words}"
-        )
+        tpl = settings.get("title_user_prompt_tpl")
+        prompt = tpl.format(text=first_words)
 
         logger.info(
             "Title generation started | project=%s model=%s words=%d",

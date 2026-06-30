@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from app.models.config_manager import _DEFAULT_SYSTEM_PROMPT
+from app.models.config_manager import _DEFAULT_SYSTEM_PROMPT, _DEFAULT_USER_PROMPT_TPL
 from app.utils.logging_setup import get_logger
 
 logger = get_logger()
@@ -37,16 +37,6 @@ class SemanticRecord:
 # ---------------------------------------------------------------------------
 # Semantic segmenter
 # ---------------------------------------------------------------------------
-
-
-_KEYWORDS_USER_PROMPT_TPL = (
-    'Extract 1 to 10 keywords that represent the main topics from the following text.\n\n'
-    'Text:\n{text}\n\n'
-    'Return ONLY valid JSON with exactly this field (no markdown, no extra text):\n'
-    '{{"text_keywords": ["kw1", "kw2", ...]}}\n\n'
-    'If no meaningful keywords can be extracted, return:\n'
-    '{{"text_keywords": []}}'
-)
 
 
 def _chunk_text_by_words(text: str, chunk_size: int, chunk_overlap: int) -> list[tuple[str, int, int]]:
@@ -143,7 +133,7 @@ class SemanticSegmenter:
             "chunk_size": 100,
             "chunk_overlap": 10,
             "system_prompt": _DEFAULT_SYSTEM_PROMPT,
-            "user_prompt_tpl": _KEYWORDS_USER_PROMPT_TPL,
+            "user_prompt_tpl": _DEFAULT_USER_PROMPT_TPL,
         }
         ia = cfg.get("ia") or {}
         merged = dict(defaults)

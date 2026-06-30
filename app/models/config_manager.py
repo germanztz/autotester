@@ -18,26 +18,52 @@ VALID_THEMES = ("light", "dark", "system")
 
 _DEFAULT_SYSTEM_PROMPT = (
     "You are a precise document analyst. Analyze the provided text, understand "
-    "its content and structure, and respond only with valid JSON."
+    "its content and structure, and respond only with valid JSON (no markdown, no extra text)."
 )
 
 _DEFAULT_USER_PROMPT_TPL = (
     'Extract 1 to 10 keywords that represent the main topics from the following text.\n\n'
     'Text:\n{text}\n\n'
-    'Return ONLY valid JSON with exactly this field (no markdown, no extra text):\n'
     '{{"text_keywords": ["kw1", "kw2", ...]}}\n\n'
     'If no meaningful keywords can be extracted, return:\n'
     '{{"text_keywords": []}}'
 )
 
 _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL = (
-    'Generate a true/false question in {language} based on the following text. '
+    'Generate a true/false question in language "{language}" based on the following text. '
     'The question must target the keyword "{keyword}" and the correct answer '
     'must be "{target_response}". '
     'Do NOT copy phrases from the original text - rephrase the concept in your own words. '
     'Return ONLY valid JSON conforming to this schema (no markdown, no extra text):\n'
     '{{"type": "true_false", "question": "your rephrased statement here", "correct_answer": "{target_response}"}}\n\n'
     'Text:\n{text}'
+)
+
+_DEFAULT_TITLE_USER_PROMPT_TPL = (
+    "Based on the following text, generate a short title of 1 to 7 words "
+    "that represents the project and detect the language of the text.\n"
+    'Return ONLY valid JSON conforming to this schema:\n'
+    '{{"title": "short descriptive title (may include emojis)", '
+    '"language": "ISO 639-1 code (e.g., en, es, fr, de, pt, it)"}}\n\n'
+    "{text}"
+)
+
+_DEFAULT_QUESTION_MIXED_USER_PROMPT_TPL = (
+    "Based on the following text and its keywords, create {count} questions "
+    "in {language} to help memorize the content. "
+    "Use a mix of question types:\n"
+    '- "multiple_choice": question with 4 options, one correct\n'
+    '- "options_choice": question with several options to choose from\n'
+    '- "fill_blank": sentence with a missing word (use ___ for the blank)\n'
+    '- "short_answer": question answerable in 1-3 words\n\n'
+    "Keywords: {keywords}\n\n"
+    "Text:\n{text}\n\n"
+    "Return ONLY valid JSON — an array of objects conforming to this schema:\n"
+    '{{"type": "multiple_choice"|"options_choice"|"fill_blank"|"short_answer", '
+    '"question": "string", '
+    '"options": ["string", ...], '
+    '"correct_answer": "string"}}\n'
+    'The "options" field is required only for type "multiple_choice".\n'
 )
 
 IA_DEFAULTS: dict[str, Any] = {
@@ -47,7 +73,9 @@ IA_DEFAULTS: dict[str, Any] = {
     "chunk_overlap": 10,
     "system_prompt": _DEFAULT_SYSTEM_PROMPT,
     "user_prompt_tpl": _DEFAULT_USER_PROMPT_TPL,
+    "title_user_prompt_tpl": _DEFAULT_TITLE_USER_PROMPT_TPL,
     "question_true_false_user_prompt_tpl": _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL,
+    "question_mixed_user_prompt_tpl": _DEFAULT_QUESTION_MIXED_USER_PROMPT_TPL,
 }
 
 LOGGING_DEFAULTS: dict[str, Any] = {
@@ -93,12 +121,23 @@ def _validate_ia(ia: dict[str, Any]) -> None:
         raise ValueError("user_prompt_tpl must be a non-empty string")
     if "{text}" not in user_prompt_tpl:
         raise ValueError("user_prompt_tpl must contain the {text} placeholder")
+    title_user_prompt_tpl = ia.get("title_user_prompt_tpl", "")
+    if not isinstance(title_user_prompt_tpl, str) or not title_user_prompt_tpl.strip():
+        raise ValueError("title_user_prompt_tpl must be a non-empty string")
+    if "{text}" not in title_user_prompt_tpl:
+        raise ValueError("title_user_prompt_tpl must contain the {text} placeholder")
     tf_user_prompt = ia.get("question_true_false_user_prompt_tpl", "")
     if not isinstance(tf_user_prompt, str) or not tf_user_prompt.strip():
         raise ValueError("question_true_false_user_prompt_tpl must be a non-empty string")
     for ph in ("{text}", "{keyword}", "{target_response}", "{language}"):
         if ph not in tf_user_prompt:
             raise ValueError(f"question_true_false_user_prompt_tpl must contain the {ph} placeholder")
+    mixed_user_prompt = ia.get("question_mixed_user_prompt_tpl", "")
+    if not isinstance(mixed_user_prompt, str) or not mixed_user_prompt.strip():
+        raise ValueError("question_mixed_user_prompt_tpl must be a non-empty string")
+    for ph in ("{count}", "{language}", "{keywords}", "{text}"):
+        if ph not in mixed_user_prompt:
+            raise ValueError(f"question_mixed_user_prompt_tpl must contain the {ph} placeholder")
 
 
 def _validate_game(game_cfg: dict[str, Any]) -> None:
