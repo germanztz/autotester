@@ -133,41 +133,35 @@ class TestIAQuestionTrueFalsePrompt:
     def test_validate_ia_rejects_empty_true_false_prompt(self):
         with pytest.raises(ValueError, match="question_true_false_user_prompt_tpl"):
             _validate_ia({
-                "ollama_url": "http://localhost:11434",
-                "ollama_model": "qwen3.5:latest",
+                "ollama_url": "http://dummy-server",
+                "ollama_model": "dummy-model",
                 "chunk_size": 100,
                 "chunk_overlap": 10,
                 "system_prompt": "a",
                 "user_prompt_tpl": "a {text}",
-                "title_system_prompt": "a",
-                "title_user_prompt_tpl": "a {text}",
                 "question_true_false_user_prompt_tpl": "",
             })
 
     def test_validate_ia_rejects_missing_text_placeholder(self):
         with pytest.raises(ValueError, match="{text}"):
             _validate_ia({
-                "ollama_url": "http://localhost:11434",
-                "ollama_model": "qwen3.5:latest",
+                "ollama_url": "http://dummy-server",
+                "ollama_model": "dummy-model",
                 "chunk_size": 100,
                 "chunk_overlap": 10,
                 "system_prompt": "a",
                 "user_prompt_tpl": "a {text}",
-                "title_system_prompt": "a",
-                "title_user_prompt_tpl": "a {text}",
                 "question_true_false_user_prompt_tpl": "no placeholder {keyword} {target_response} {language}",
             })
 
     def test_validate_ia_accepts_valid_true_false_prompt(self):
         _validate_ia({
-            "ollama_url": "http://localhost:11434",
-            "ollama_model": "qwen3.5:latest",
+            "ollama_url": "http://dummy-server",
+            "ollama_model": "dummy-model",
             "chunk_size": 100,
             "chunk_overlap": 10,
             "system_prompt": "a",
             "user_prompt_tpl": "a {text}",
-            "title_system_prompt": "a",
-            "title_user_prompt_tpl": "a {text}",
             "question_true_false_user_prompt_tpl": "valid {text} {keyword} {target_response} {language}",
         })
 
@@ -180,14 +174,12 @@ class TestIAQuestionTrueFalsePrompt:
     def test_config_route_saves_true_false_prompt(self, client):
         resp = client.post("/config/", data={
             "theme": "system",
-            "ollama_url": "http://localhost:11434",
-            "ollama_model": "qwen3.5:latest",
+            "ollama_url": "http://dummy-server",
+            "ollama_model": "dummy-model",
             "chunk_size": 100,
             "chunk_overlap": 10,
             "system_prompt": "sp",
             "user_prompt_tpl": "up {text}",
-            "title_system_prompt": "tsp",
-            "title_user_prompt_tpl": "tup {text}",
             "question_true_false_user_prompt_tpl": "tf {text} {keyword} {target_response} {language}",
             "log_level": "INFO",
         }, follow_redirects=True)

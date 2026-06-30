@@ -213,9 +213,9 @@ class LazyAIManager:
     def generate_title(self, project_name: str) -> tuple[str, str]:
         """Generate a project title and detect the document language.
 
-        Uses the LLM with ``title_system_prompt`` and ``title_user_prompt_tpl``
-        from the IA config. Expects the LLM to return JSON with ``title`` and
-        ``language`` keys. Skips if both title and language were already set.
+        Uses the LLM with the configured system prompt. Expects the LLM to
+        return JSON with ``title`` and ``language`` keys. Skips if both title
+        and language were already set.
 
         Returns ``(title, language)`` — either may be empty on failure.
         Non-fatal — the supervisor continues with chunk processing regardless.
@@ -238,21 +238,15 @@ class LazyAIManager:
         first_words = " ".join(words[:100])
         settings = self.segmenter._get_ia_settings()
         model = settings["ollama_model"]
-        system_prompt = settings.get(
-            "title_system_prompt",
-            "You are a helpful assistant that analyzes document content. "
-            "Respond only with valid JSON, no extra text.",
-        )
-        user_prompt_tpl = settings.get(
-            "title_user_prompt_tpl",
+        system_prompt = settings["system_prompt"]
+        prompt = (
             "Based on the following text, generate a short title of 1 to 7 words "
             "that represents the project and detect the language of the text.\n"
             'Return ONLY valid JSON conforming to this schema:\n'
             '{{"title": "short descriptive title (may include emojis)", '
             '"language": "ISO 639-1 code (e.g., en, es, fr, de, pt, it)"}}\n\n'
-            "{text}",
+            f"{first_words}"
         )
-        prompt = user_prompt_tpl.format(text=first_words)
 
         logger.info(
             "Title generation started | project=%s model=%s words=%d",

@@ -42,7 +42,7 @@ class OllamaChatClient:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:11434",
+        base_url: str = "http://dummy-server",
         timeout: float = 300.0,
         session: Any | None = None,
         max_attempts: int = _MAX_ATTEMPTS,

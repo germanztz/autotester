@@ -66,9 +66,7 @@ autotester/
 
 - Python 3.10+
 - pip
-- An Ollama instance reachable at `http://localhost:11434` with the
-  `qwen3-embedding:4b` model pulled (or update the URL/model in
-  `/config`).
+- An Ollama instance reachable at `SERVER` with the model pulled (or update the URL/model in  `/config`).
 
 ## Installation
 
@@ -82,7 +80,7 @@ source .venv/bin/activate          # Linux / macOS
 pip install -r requirements.txt
 
 # Pull the default embedding model (only required once)
-ollama pull qwen3-embedding:4b
+ollama pull model
 ```
 
 ## Running the app
@@ -146,18 +144,6 @@ configured level at launch.
 
 Created automatically on first launch:
 
-```yaml
-theme: system
-app_name: autotester
-auto_refresh: true
-ia:
-  ollama_url: http://localhost:11434
-  embedding_model: qwen3-embedding:4b
-  chunk_size: 500
-  chunk_overlap: 50
-logging:
-  level: INFO
-```
 
 You can edit it manually; missing keys fall back to defaults and an invalid
 `theme` or `logging.level` value is corrected to the default.

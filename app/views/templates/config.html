@@ -83,9 +83,7 @@
     <div id="collapsePrompts" class="collapse">
         <div class="card-body">
             <p class="text-muted small">
-                Configure how the LLM processes PDF content. The extract concepts
-                prompt is sent for every text chunk; the extract title prompt is
-                sent once per project to generate a display name.
+                Configure how the LLM processes PDF content.
             </p>
             <div class="mb-3">
                 <label class="form-label" for="system_prompt">System prompt</label>
@@ -97,14 +95,6 @@
                 <div class="form-text">
                     Use <code>{text}</code> as a placeholder for the chunk content.
                     Use <code>&#123;&#123; &#125;&#125;</code> for literal JSON braces.
-                </div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label" for="title_user_prompt_tpl">Extract title prompt</label>
-                <textarea class="form-control font-monospace" id="title_user_prompt_tpl" name="title_user_prompt_tpl" rows="4">{{ app_config.ia.title_user_prompt_tpl }}</textarea>
-                <div class="form-text">
-                    Sent once per project with the first 100 words of the extracted
-                    text. Use <code>{text}</code> as a placeholder.
                 </div>
             </div>
             <div class="mb-3">

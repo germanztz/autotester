@@ -39,7 +39,7 @@ class _FakeLLM:
             raise OllamaUnavailable("Ollama down")
 
         # Question generation (called by QuestionGenerator)
-        if system and "quiz generator" in system:
+        if "question" in prompt:
             if "Generate a true/false question" in prompt or "true/false" in prompt:
                 return json.dumps({
                     "type": "true_false",

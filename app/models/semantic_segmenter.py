@@ -11,6 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from app.models.config_manager import _DEFAULT_SYSTEM_PROMPT
 from app.utils.logging_setup import get_logger
 
 logger = get_logger()
@@ -37,11 +38,6 @@ class SemanticRecord:
 # Semantic segmenter
 # ---------------------------------------------------------------------------
 
-
-_KEYWORDS_SYSTEM_PROMPT = (
-    "You are a keyword extraction assistant. Your task is to extract the most "
-    "important keywords from the given text chunk."
-)
 
 _KEYWORDS_USER_PROMPT_TPL = (
     'Extract 1 to 10 keywords that represent the main topics from the following text.\n\n'
@@ -142,11 +138,11 @@ class SemanticSegmenter:
     def _get_ia_settings(self) -> dict[str, Any]:
         cfg = self.config_manager.load()
         defaults = {
-            "ollama_url": "http://localhost:11434",
+            "ollama_url": "http://dummy-server",
             "ollama_model": None,
             "chunk_size": 100,
             "chunk_overlap": 10,
-            "system_prompt": _KEYWORDS_SYSTEM_PROMPT,
+            "system_prompt": _DEFAULT_SYSTEM_PROMPT,
             "user_prompt_tpl": _KEYWORDS_USER_PROMPT_TPL,
         }
         ia = cfg.get("ia") or {}

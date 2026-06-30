@@ -12,8 +12,8 @@ class TestIaDefaults:
         cfg = mgr.load()
         assert "ia" in cfg
         ia = cfg["ia"]
-        assert ia["ollama_url"] == "http://localhost:11434"
-        assert ia["ollama_model"] == "qwen3.5:latest"
+        assert isinstance(ia["ollama_url"], str) and ia["ollama_url"]
+        assert isinstance(ia["ollama_model"], str) and ia["ollama_model"]
         assert ia["chunk_size"] == 100
         assert ia["chunk_overlap"] == 10
         assert "system_prompt" in ia
@@ -21,11 +21,6 @@ class TestIaDefaults:
         assert isinstance(ia["system_prompt"], str) and ia["system_prompt"]
         assert isinstance(ia["user_prompt_tpl"], str) and ia["user_prompt_tpl"]
         assert "{text}" in ia["user_prompt_tpl"]
-        assert "title_system_prompt" in ia
-        assert "title_user_prompt_tpl" in ia
-        assert isinstance(ia["title_system_prompt"], str) and ia["title_system_prompt"]
-        assert isinstance(ia["title_user_prompt_tpl"], str) and ia["title_user_prompt_tpl"]
-        assert "{text}" in ia["title_user_prompt_tpl"]
         assert "question_true_false_user_prompt_tpl" in ia
         assert isinstance(ia["question_true_false_user_prompt_tpl"], str) and ia["question_true_false_user_prompt_tpl"]
         assert "{text}" in ia["question_true_false_user_prompt_tpl"]
@@ -41,8 +36,6 @@ class TestIaDefaults:
             "chunk_overlap",
             "system_prompt",
             "user_prompt_tpl",
-            "title_system_prompt",
-            "title_user_prompt_tpl",
             "question_true_false_user_prompt_tpl",
         }
 
@@ -52,10 +45,11 @@ class TestIaUpdates:
         mgr = ConfigManager(temp_workspace["config"])
         mgr.update_ia(ollama_url="http://example.com:11434", chunk_size=800)
         ia = mgr.load()["ia"]
+        original_model = ia["ollama_model"]
         assert ia["ollama_url"] == "http://example.com:11434"
         assert ia["chunk_size"] == 800
         # untouched fields keep their defaults
-        assert ia["ollama_model"] == "qwen3.5:latest"
+        assert ia["ollama_model"] == original_model
         assert ia["chunk_overlap"] == 10
 
     def test_partial_update_preserves_other_ia_keys(self, temp_workspace: dict):

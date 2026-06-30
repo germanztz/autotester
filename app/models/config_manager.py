@@ -17,9 +17,8 @@ from app.utils.logging_setup import VALID_LOG_LEVELS
 VALID_THEMES = ("light", "dark", "system")
 
 _DEFAULT_SYSTEM_PROMPT = (
-    "You are a semantic text analyzer. Your task is to group related concepts "
-    "together, maintain the original meaning and flow, and extract key keywords "
-    "from each text chunk."
+    "You are a precise document analyst. Analyze the provided text, understand "
+    "its content and structure, and respond only with valid JSON."
 )
 
 _DEFAULT_USER_PROMPT_TPL = (
@@ -29,11 +28,6 @@ _DEFAULT_USER_PROMPT_TPL = (
     '{{"text_keywords": ["kw1", "kw2", ...]}}\n\n'
     'If no meaningful keywords can be extracted, return:\n'
     '{{"text_keywords": []}}'
-)
-
-_DEFAULT_TITLE_SYSTEM_PROMPT = (
-    "You are a helpful assistant that analyzes document content. "
-    "Respond only with valid JSON, no extra text."
 )
 
 _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL = (
@@ -46,15 +40,6 @@ _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL = (
     'Text:\n{text}'
 )
 
-_DEFAULT_TITLE_USER_PROMPT_TPL = (
-    "Based on the following text, generate a short title of 1 to 7 words that "
-    "represents the project and detect the language of the text. "
-    "Return ONLY valid JSON conforming to this schema:\n"
-    '{{"title": "short descriptive title (may include emojis)", '
-    '"language": "ISO 639-1 code (e.g., en, es, fr, de, pt, it)"}}\n\n'
-    "{text}"
-)
-
 IA_DEFAULTS: dict[str, Any] = {
     "ollama_url": "http://localhost:11434",
     "ollama_model": "qwen3.5:latest",
@@ -62,8 +47,6 @@ IA_DEFAULTS: dict[str, Any] = {
     "chunk_overlap": 10,
     "system_prompt": _DEFAULT_SYSTEM_PROMPT,
     "user_prompt_tpl": _DEFAULT_USER_PROMPT_TPL,
-    "title_system_prompt": _DEFAULT_TITLE_SYSTEM_PROMPT,
-    "title_user_prompt_tpl": _DEFAULT_TITLE_USER_PROMPT_TPL,
     "question_true_false_user_prompt_tpl": _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL,
 }
 
@@ -110,14 +93,6 @@ def _validate_ia(ia: dict[str, Any]) -> None:
         raise ValueError("user_prompt_tpl must be a non-empty string")
     if "{text}" not in user_prompt_tpl:
         raise ValueError("user_prompt_tpl must contain the {text} placeholder")
-    title_system_prompt = ia.get("title_system_prompt", "")
-    if not isinstance(title_system_prompt, str) or not title_system_prompt.strip():
-        raise ValueError("title_system_prompt must be a non-empty string")
-    title_user_prompt_tpl = ia.get("title_user_prompt_tpl", "")
-    if not isinstance(title_user_prompt_tpl, str) or not title_user_prompt_tpl.strip():
-        raise ValueError("title_user_prompt_tpl must be a non-empty string")
-    if "{text}" not in title_user_prompt_tpl:
-        raise ValueError("title_user_prompt_tpl must contain the {text} placeholder")
     tf_user_prompt = ia.get("question_true_false_user_prompt_tpl", "")
     if not isinstance(tf_user_prompt, str) or not tf_user_prompt.strip():
         raise ValueError("question_true_false_user_prompt_tpl must be a non-empty string")

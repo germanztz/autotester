@@ -5,14 +5,10 @@ import json
 import time
 from typing import Any, Optional
 
+from app.models.config_manager import _DEFAULT_SYSTEM_PROMPT
 from app.utils.logging_setup import get_logger
 
 logger = get_logger()
-
-_QUESTION_SYSTEM_PROMPT = (
-    "You are a quiz generator that creates questions to help someone memorize "
-    "document content. Respond only with valid JSON conforming to the requested schema."
-)
 
 _TRUE_FALSE_USER_PROMPT_TPL = (
     'Generate a true/false question in {language} based on the following text. '
@@ -94,7 +90,7 @@ class QuestionGenerator:
                 raw = self.llm.generate(
                     model,
                     prompt,
-                    system=_QUESTION_SYSTEM_PROMPT,
+                    system=_DEFAULT_SYSTEM_PROMPT,
                 )
             except Exception as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
@@ -179,7 +175,7 @@ class QuestionGenerator:
                     raw = self.llm.generate(
                         model,
                         prompt,
-                        system=_QUESTION_SYSTEM_PROMPT,
+                        system=_DEFAULT_SYSTEM_PROMPT,
                     )
                 except Exception as exc:
                     last_error = f"{type(exc).__name__}: {exc}"
