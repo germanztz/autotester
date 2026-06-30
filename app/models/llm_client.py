@@ -147,15 +147,17 @@ class OllamaChatClient:
         model: str,
         prompt: str,
         system: str | None = None,
-        format_json: bool = True,
+        format: str = "json",
+        think: bool = False,
     ) -> str:
         """Send a chat prompt to the LLM and return the response text.
 
         Args:
-            model: The Ollama model name .
+            model: The Ollama model name.
             prompt: The user message content.
             system: Optional system message content.
-            format_json: When True, requests JSON-structured output from Ollama.
+            format: Output format (``"json"`` or ``""`` for plain text).
+            think: Whether to enable reasoning tokens (deep‑seek style).
 
         Returns:
             The assistant's response as a plain string.
@@ -170,22 +172,23 @@ class OllamaChatClient:
 
         total_chars = sum(len(m.get("content", "")) for m in messages)
         logger.info(
-            "Ollama /api/chat | model=%s messages=%d total_chars=%d timeout=%s base_url=%s format_json=%s",
+            "Ollama /api/chat | model=%s messages=%d total_chars=%d timeout=%s "
+            "base_url=%s format=%s think=%s",
             model,
             len(messages),
             total_chars,
             self.timeout,
             self.base_url,
-            format_json,
+            format,
+            think,
         )
         body: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "stream": False,
-            "think": False,
+            "think": think,
+            "format": format,
         }
-        if format_json:
-            body["format"] = "json"
         response = self._do_with_retry(
             "POST",
             "/api/chat",
