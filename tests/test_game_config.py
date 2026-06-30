@@ -21,14 +21,12 @@ class TestGameDefaults:
         assert cfg["game"]["language"] == "es"
         assert cfg["game"]["questions_per_paragraph"] == 5
         assert cfg["game"]["correct_to_master"] == 3
-        assert cfg["game"]["model"] == "qwen3.5:latest"
 
     def test_game_defaults_constant_exports_expected_keys(self):
         assert set(GAME_DEFAULTS) == {
             "language",
             "questions_per_paragraph",
             "correct_to_master",
-            "model",
         }
 
     def test_default_config_includes_game(self):

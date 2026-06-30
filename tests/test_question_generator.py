@@ -80,10 +80,9 @@ def fake_config_manager():
                     "language": "es",
                     "questions_per_paragraph": 5,
                     "correct_to_master": 3,
-                    "model": "qwen3.5:latest",
                 },
                 "ia": {
-                    "ollama_model": "qwen3.5:latest",
+                    "ollama_model": "ollama-model-from-ia",
                     "question_true_false_user_prompt_tpl": (
                         'Generate a true/false question in {language} '
                         'targeting keyword "{keyword}" with answer {target_response}. '
@@ -153,14 +152,14 @@ class TestGenerate:
         )
         assert fake_llm.calls[0][0] == "custom-model"
 
-    def test_falls_back_to_config_model(self, generator: QuestionGenerator, fake_llm: _FakeLLM):
+    def test_falls_back_to_ia_model(self, generator: QuestionGenerator, fake_llm: _FakeLLM):
         generator.generate(
             chunk_text="Sample text.",
             keywords=["test"],
             count=2,
             language="en",
         )
-        assert fake_llm.calls[0][0] == "qwen3.5:latest"
+        assert fake_llm.calls[0][0] == "ollama-model-from-ia"
 
     def test_raises_on_llm_failure(self, generator: QuestionGenerator):
         gen = QuestionGenerator(_FakeLLM(fail=True), generator.config_manager)

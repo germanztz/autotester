@@ -11,7 +11,7 @@ logger = get_logger()
 
 _QUESTION_SYSTEM_PROMPT = (
     "You are a quiz generator that creates questions to help someone memorize "
-    "document content. Respond only with valid JSON, no extra text."
+    "document content. Respond only with valid JSON conforming to the requested schema."
 )
 
 _TRUE_FALSE_USER_PROMPT_TPL = (
@@ -19,8 +19,8 @@ _TRUE_FALSE_USER_PROMPT_TPL = (
     'The question must target the keyword "{keyword}" and the correct answer '
     'must be "{target_response}". '
     'Do NOT copy phrases from the original text - rephrase the concept in your own words. '
-    'Return ONLY valid JSON with exactly these fields (no markdown, no extra text):\n'
-    '{{"type": "true_false", "question": "your statement here", "correct_answer": "{target_response}"}}\n\n'
+    'Return ONLY valid JSON conforming to this schema (no markdown, no extra text):\n'
+    '{{"type": "true_false", "question": "your rephrased statement here", "correct_answer": "{target_response}"}}\n\n'
     'Text:\n{text}'
 )
 
@@ -34,11 +34,12 @@ _QUESTION_USER_PROMPT_TPL = (
     '- "short_answer": question answerable in 1-3 words\n\n'
     "Keywords: {keywords}\n\n"
     "Text:\n{text}\n\n"
-    "Return a JSON array of objects. Each object must have:\n"
-    '- "type": one of "multiple_choice", "options_choice", "fill_blank", "short_answer"\n'
-    '- "question": the question text\n'
-    '- "options": ["A", "B", "C", "D"]  (only for multiple_choice)\n'
-    '- "correct_answer": the correct answer\n'
+    "Return ONLY valid JSON — an array of objects conforming to this schema:\n"
+    '{{"type": "multiple_choice"|"options_choice"|"fill_blank"|"short_answer", '
+    '"question": "string", '
+    '"options": ["string", ...], '
+    '"correct_answer": "string"}}\n'
+    'The "options" field is required only for type "multiple_choice".\n'
 )
 
 _MAX_RETRIES = 3
@@ -77,9 +78,8 @@ class QuestionGenerator:
         """
         if not model:
             cfg = self.config_manager.load()
-            game_cfg = cfg.get("game", {})
             ia_cfg = cfg.get("ia", {})
-            model = game_cfg.get("model") or ia_cfg.get("ollama_model", "qwen3.5:latest")
+            model = ia_cfg.get("ollama_model", None)
 
         prompt = _QUESTION_USER_PROMPT_TPL.format(
             count=count,
@@ -95,7 +95,6 @@ class QuestionGenerator:
                     model,
                     prompt,
                     system=_QUESTION_SYSTEM_PROMPT,
-                    format_json=False,
                 )
             except Exception as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
@@ -155,8 +154,7 @@ class QuestionGenerator:
         if not model:
             cfg = self.config_manager.load()
             ia_cfg = cfg.get("ia", {})
-            game_cfg = cfg.get("game", {})
-            model = game_cfg.get("model") or ia_cfg.get("ollama_model", "qwen3.5:latest")
+            model = ia_cfg.get("ollama_model", None)
 
         cfg = self.config_manager.load()
         tpl = cfg.get("ia", {}).get(
@@ -182,7 +180,6 @@ class QuestionGenerator:
                         model,
                         prompt,
                         system=_QUESTION_SYSTEM_PROMPT,
-                        format_json=False,
                     )
                 except Exception as exc:
                     last_error = f"{type(exc).__name__}: {exc}"

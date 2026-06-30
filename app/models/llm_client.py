@@ -152,7 +152,7 @@ class OllamaChatClient:
         """Send a chat prompt to the LLM and return the response text.
 
         Args:
-            model: The Ollama model name (e.g. ``qwen3.5:latest``).
+            model: The Ollama model name .
             prompt: The user message content.
             system: Optional system message content.
             format_json: When True, requests JSON-structured output from Ollama.

@@ -41,17 +41,17 @@ _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL = (
     'The question must target the keyword "{keyword}" and the correct answer '
     'must be "{target_response}". '
     'Do NOT copy phrases from the original text - rephrase the concept in your own words. '
-    'Return ONLY valid JSON with exactly these fields (no markdown, no extra text):\n'
-    '{{"type": "true_false", "question": "your statement here", "correct_answer": "{target_response}"}}\n\n'
+    'Return ONLY valid JSON conforming to this schema (no markdown, no extra text):\n'
+    '{{"type": "true_false", "question": "your rephrased statement here", "correct_answer": "{target_response}"}}\n\n'
     'Text:\n{text}'
 )
 
 _DEFAULT_TITLE_USER_PROMPT_TPL = (
     "Based on the following text, generate a short title of 1 to 7 words that "
     "represents the project and detect the language of the text. "
-    "Return a JSON object with two keys:\n"
-    '- "title": a concise, descriptive project title (may include emojis)\n'
-    '- "language": the ISO 639-1 language code (e.g., en, es, fr, de, pt, it)\n\n'
+    "Return ONLY valid JSON conforming to this schema:\n"
+    '{{"title": "short descriptive title (may include emojis)", '
+    '"language": "ISO 639-1 code (e.g., en, es, fr, de, pt, it)"}}\n\n'
     "{text}"
 )
 
@@ -75,7 +75,6 @@ GAME_DEFAULTS: dict[str, Any] = {
     "language": "es",
     "questions_per_paragraph": 5,
     "correct_to_master": 3,
-    "model": "qwen3.5:latest",
 }
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -141,10 +140,6 @@ def _validate_game(game_cfg: dict[str, Any]) -> None:
     ctm = game_cfg.get("correct_to_master", GAME_DEFAULTS["correct_to_master"])
     if not isinstance(ctm, int) or ctm <= 0:
         raise ValueError("game.correct_to_master must be a positive integer")
-    model = game_cfg.get("model", GAME_DEFAULTS["model"])
-    if not isinstance(model, str) or not model.strip():
-        raise ValueError("game.model must be a non-empty string")
-
 
 def _validate_logging(logging_cfg: dict[str, Any]) -> None:
     """Raise ValueError if the logging section is invalid."""

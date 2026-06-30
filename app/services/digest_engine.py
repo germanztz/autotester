@@ -247,9 +247,9 @@ class LazyAIManager:
             "title_user_prompt_tpl",
             "Based on the following text, generate a short title of 1 to 7 words "
             "that represents the project and detect the language of the text.\n"
-            'Return a JSON object with two keys:\n'
-            '- "title": a concise, descriptive project title (may include emojis)\n'
-            '- "language": the ISO 639-1 language code (e.g., en, es, fr, de, pt, it)\n\n'
+            'Return ONLY valid JSON conforming to this schema:\n'
+            '{{"title": "short descriptive title (may include emojis)", '
+            '"language": "ISO 639-1 code (e.g., en, es, fr, de, pt, it)"}}\n\n'
             "{text}",
         )
         prompt = user_prompt_tpl.format(text=first_words)
@@ -260,7 +260,7 @@ class LazyAIManager:
         )
         try:
             raw = self.segmenter.llm.generate(
-                model, prompt, system=system_prompt, format_json=False,
+                model, prompt, system=system_prompt,
             )
         except Exception as exc:
             logger.warning(

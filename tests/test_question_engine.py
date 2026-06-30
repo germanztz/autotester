@@ -39,7 +39,6 @@ class _FakeConfigManager:
                 "language": "es",
                 "questions_per_paragraph": 3,
                 "correct_to_master": 2,
-                "model": "qwen3.5:latest",
             },
         }
 

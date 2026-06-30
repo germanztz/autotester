@@ -143,7 +143,7 @@ class SemanticSegmenter:
         cfg = self.config_manager.load()
         defaults = {
             "ollama_url": "http://localhost:11434",
-            "ollama_model": "qwen3.5:latest",
+            "ollama_model": None,
             "chunk_size": 100,
             "chunk_overlap": 10,
             "system_prompt": _KEYWORDS_SYSTEM_PROMPT,
