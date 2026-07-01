@@ -101,6 +101,19 @@ body {
     color: var(--bs-primary);
 }
 
+.collapsed-prompt-label {
+    cursor: pointer;
+    user-select: none;
+}
+
+.collapsed-prompt-label[aria-expanded="true"] .bi-chevron-right {
+    transform: rotate(90deg);
+}
+
+.collapsed-prompt-label .bi-chevron-right {
+    transition: transform 0.2s ease;
+}
+
 .app-main {
     flex-grow: 1;
     overflow-y: auto;
@@ -110,6 +123,11 @@ body {
 .project-list .project-item {
     transition: background-color 0.15s ease-in-out;
     cursor: pointer;
+    color: var(--bs-body-color);
+}
+
+.project-list .project-item a {
+    color: var(--bs-body-color);
 }
 
 .project-list .project-item.active {
