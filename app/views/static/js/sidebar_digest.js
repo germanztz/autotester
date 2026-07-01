@@ -58,6 +58,18 @@
         return p.digest_title || p.name;
     }
 
+    function setNavbarTitle(display) {
+        var npt = document.getElementById("navbar-project-title");
+        if (npt) npt.textContent = " \u2014 " + display;
+        document.title = "autotester \u2014 " + display;
+    }
+
+    function clearNavbarTitle() {
+        var npt = document.getElementById("navbar-project-title");
+        if (npt) npt.textContent = "";
+        document.title = "autotester";
+    }
+
     function selectProject(name) {
         if (selectedProject === name) {
             return;
@@ -70,6 +82,8 @@
             '#project-list [data-project-name="' + CSS.escape(selectedProject) + '"]'
         );
         var display = el ? el.dataset.digestTitle : name;
+        setNavbarTitle(display);
+        collapseSidebar();
         if (window.QuizUI) {
             QuizUI.selectProject(name, display);
         }
@@ -78,12 +92,33 @@
     window.setSelectedProject = selectProject;
     window.refreshSidebar = tick;
 
+    function collapseSidebar() {
+        var sidebar = document.getElementById("app-sidebar");
+        if (sidebar) sidebar.classList.add("collapsed");
+    }
+
+    function expandSidebar() {
+        var sidebar = document.getElementById("app-sidebar");
+        if (sidebar) sidebar.classList.remove("collapsed");
+    }
+
+    function toggleSidebar() {
+        var sidebar = document.getElementById("app-sidebar");
+        if (sidebar) sidebar.classList.toggle("collapsed");
+    }
+
+    window.collapseSidebar = collapseSidebar;
+    window.expandSidebar = expandSidebar;
+
     function restoreSelection() {
         if (!selectedProject) return;
         const el = document.querySelector(
             '#project-list [data-project-name="' + CSS.escape(selectedProject) + '"]'
         );
-        if (el) el.classList.add("active");
+        if (el) {
+            el.classList.add("active");
+            setNavbarTitle(el.dataset.digestTitle || selectedProject);
+        }
     }
 
     function renderRow(p) {
@@ -179,6 +214,26 @@
     }
 
     document.addEventListener("DOMContentLoaded", function () {
+        // Auto-collapse sidebar on small screens.
+        var mobileMq = window.matchMedia("(max-width: 767px)");
+        function handleMobileChange(e) {
+            if (e.matches) {
+                collapseSidebar();
+            }
+        }
+        mobileMq.addEventListener("change", handleMobileChange);
+        handleMobileChange(mobileMq);
+
+        // Sidebar collapse toggle.
+        document.body.addEventListener("click", function (e) {
+            var toggle = e.target.closest(".sidebar-toggle");
+            if (toggle) {
+                e.preventDefault();
+                toggleSidebar();
+                return;
+            }
+        });
+
         // Project selection via event delegation on the sidebar list.
         document.body.addEventListener("click", function (e) {
             var item = e.target.closest(".project-item");

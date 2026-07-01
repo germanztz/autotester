@@ -1,81 +1,98 @@
-<aside class="app-sidebar">
-    <div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
-        <span class="fw-semibold text-uppercase small text-muted">Projects</span>
+<aside class="app-sidebar d-flex flex-column{% if selected_project %} collapsed{% endif %}" id="app-sidebar">
+    <div class="sidebar-header px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-1">
+            <button class="btn btn-sm btn-link p-0 sidebar-toggle" type="button" title="Collapse sidebar">
+                <i class="bi bi-layout-sidebar"></i>
+            </button>
+            <span class="sidebar-title fw-semibold text-uppercase small text-muted">Projects</span>
+        </div>
         <button class="btn btn-sm btn-outline-primary upload-trigger" type="button" title="Open PDF">
             <i class="bi bi-plus-lg"></i>
         </button>
     </div>
-    {% if projects %}
-        <ul class="list-group list-group-flush project-list" id="project-list">
-            {% for project in projects %}
-             <li class="list-group-item project-item"
-                data-project-name="{{ project.name }}"
-                data-digest-title="{{ project.digest_title or project.name }}"
-                data-state="{{ project.digest_state }}">
-                <div class="d-flex align-items-center">
-                    {% if project.digest_state == 'complete' %}
-                        <i class="bi bi-check2-circle text-success me-2"></i>
-                    {% elif project.digest_state == 'failed' %}
-                        <i class="bi bi-exclamation-octagon text-danger me-2"></i>
-                    {% elif project.digest_state == 'processing' %}
-                        <i class="bi bi-hourglass-split text-primary me-2"></i>
-                    {% elif project.digest_state == 'cancelled' %}
-                        <i class="bi bi-pause-circle text-warning me-2"></i>
-                    {% elif project.digest_state == 'error' %}
-                        <i class="bi bi-exclamation-triangle text-danger me-2"></i>
-                    {% else %}
-                        <i class="bi bi-hourglass-split text-primary me-2"></i>
-                    {% endif %}
-                    <div class="flex-grow-1 text-truncate" title="{{ project.digest_title or project.name }}">
-                        <a href="{{ url_for('projects.show', project_name=project.name) }}" class="text-decoration-none text-reset">
-                            <div class="fw-semibold text-truncate">{{ project.digest_title or project.name }}</div>
-                        </a>
-                        <div class="small text-muted project-status">
-                            {% if project.digest_state == 'complete' %}
-                                {{ project.digest_total_keywords }} keywords
-                            {% elif project.digest_state == 'failed' %}
-                                <span class="text-danger">failed</span>
-                            {% elif project.digest_state == 'error' %}
-                                <span class="text-danger">Error</span>
-                            {% elif project.digest_state == 'processing' or project.digest_state == 'queued' %}
-                                {% if project.digest_total_chunks > 0 %}
-                                    processing {{ (project.digest_chunks_processed / project.digest_total_chunks * 100) | int }}%
+    <div class="sidebar-scroll flex-grow-1 overflow-y-auto">
+        {% if projects %}
+            <ul class="list-group list-group-flush project-list" id="project-list">
+                {% for project in projects %}
+                 <li class="list-group-item project-item"
+                    data-project-name="{{ project.name }}"
+                    data-digest-title="{{ project.digest_title or project.name }}"
+                    data-state="{{ project.digest_state }}">
+                    <div class="d-flex align-items-center">
+                        {% if project.digest_state == 'complete' %}
+                            <i class="bi bi-check2-circle text-success me-2"></i>
+                        {% elif project.digest_state == 'failed' %}
+                            <i class="bi bi-exclamation-octagon text-danger me-2"></i>
+                        {% elif project.digest_state == 'processing' %}
+                            <i class="bi bi-hourglass-split text-primary me-2"></i>
+                        {% elif project.digest_state == 'cancelled' %}
+                            <i class="bi bi-pause-circle text-warning me-2"></i>
+                        {% elif project.digest_state == 'error' %}
+                            <i class="bi bi-exclamation-triangle text-danger me-2"></i>
+                        {% else %}
+                            <i class="bi bi-hourglass-split text-primary me-2"></i>
+                        {% endif %}
+                        <div class="flex-grow-1 text-truncate" title="{{ project.digest_title or project.name }}">
+                            <a href="{{ url_for('projects.show', project_name=project.name) }}" class="text-decoration-none text-reset">
+                                <div class="fw-semibold text-truncate">{{ project.digest_title or project.name }}</div>
+                            </a>
+                            <div class="small text-muted project-status">
+                                {% if project.digest_state == 'complete' %}
+                                    {{ project.digest_total_keywords }} keywords
+                                {% elif project.digest_state == 'failed' %}
+                                    <span class="text-danger">failed</span>
+                                {% elif project.digest_state == 'error' %}
+                                    <span class="text-danger">Error</span>
+                                {% elif project.digest_state == 'processing' or project.digest_state == 'queued' %}
+                                    {% if project.digest_total_chunks > 0 %}
+                                        processing {{ (project.digest_chunks_processed / project.digest_total_chunks * 100) | int }}%
+                                    {% else %}
+                                        processing 0%
+                                    {% endif %}
+                                {% elif project.digest_state == 'cancelled' %}
+                                    <span class="text-warning">cancelled</span>
                                 {% else %}
-                                    processing 0%
+                                    {{ project.digest_state }}
                                 {% endif %}
-                            {% elif project.digest_state == 'cancelled' %}
-                                <span class="text-warning">cancelled</span>
-                            {% else %}
-                                {{ project.digest_state }}
+                            </div>
+                        </div>
+                        <div class="project-actions">
+                            {% if project.digest_state in ('processing', 'queued', 'error') %}
+                            <form method="POST" action="{{ url_for('files.cancel_digest', project_name=project.name) }}"
+                                  class="d-inline" data-action="cancel">
+                                <button type="submit" class="btn btn-sm btn-link p-1 text-warning" title="Stop digest">
+                                    <i class="bi bi-stop-fill"></i>
+                                </button>
+                            </form>
                             {% endif %}
+                            <button type="button" class="btn btn-sm btn-link p-1"
+                                    data-bs-toggle="modal" data-bs-target="#renameModal"
+                                    data-project="{{ project.name }}"
+                                    data-digest-title="{{ project.digest_title or project.name }}"
+                                    data-digest-language="{{ project.digest_language or '' }}"
+                                    data-digest-total-words="{{ project.digest_total_words }}"
+                                    data-digest-total-chunks="{{ project.digest_total_chunks }}"
+                                    data-digest-total-keywords="{{ project.digest_total_keywords }}"
+                                    data-digest-total-questions="{{ project.digest_total_questions }}"
+                                    title="Project options">
+                                <i class="bi bi-pencil"></i>
+                            </button>
                         </div>
                     </div>
-                    <div class="project-actions">
-                        {% if project.digest_state in ('processing', 'queued', 'error') %}
-                        <form method="POST" action="{{ url_for('files.cancel_digest', project_name=project.name) }}"
-                              class="d-inline" data-action="cancel">
-                            <button type="submit" class="btn btn-sm btn-link p-1 text-warning" title="Stop digest">
-                                <i class="bi bi-stop-fill"></i>
-                            </button>
-                        </form>
-                        {% endif %}
-                        <button type="button" class="btn btn-sm btn-link p-1"
-                                data-bs-toggle="modal" data-bs-target="#renameModal"
-                                data-project="{{ project.name }}"
-                                data-digest-title="{{ project.digest_title or project.name }}"
-                                data-digest-language="{{ project.digest_language or '' }}"
-                                title="Project options">
-                            <i class="bi bi-pencil"></i>
-                        </button>
-                    </div>
-                </div>
-            </li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <div class="p-3 text-center text-muted small">
-            <i class="bi bi-folder2-open d-block fs-3 mb-2"></i>
-            No projects yet.<br>Use <strong>File &raquo; Open</strong> to add a PDF.
-        </div>
-    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <div class="p-3 text-center text-muted small">
+                <i class="bi bi-folder2-open d-block fs-3 mb-2"></i>
+                No projects yet.<br>Use <strong>File &raquo; Open</strong> to add a PDF.
+            </div>
+        {% endif %}
+    </div>
+    <div class="sidebar-actionbar border-top px-3 py-2 flex-shrink-0 d-flex align-items-center">
+        <a href="{{ url_for('config.show') }}" class="text-decoration-none text-reset d-flex align-items-center gap-2">
+            <i class="bi bi-gear"></i>
+            <span class="small">Settings</span>
+        </a>
+    </div>
 </aside>

@@ -95,6 +95,7 @@ class ProjectEntry:
     digest_total_chunks: int = 0
     digest_chunks_processed: int = 0
     digest_total_keywords: int = 0
+    digest_total_questions: int = 0
     digest_title: str = ""
     digest_language: str = ""
     digest_error: str | None = None
@@ -112,6 +113,7 @@ class ProjectEntry:
             "digest_total_chunks": self.digest_total_chunks,
             "digest_chunks_processed": self.digest_chunks_processed,
             "digest_total_keywords": self.digest_total_keywords,
+            "digest_total_questions": self.digest_total_questions,
             "digest_title": self.digest_title,
             "digest_language": self.digest_language,
             "digest_error": self.digest_error,
@@ -156,6 +158,9 @@ class FileManager:
             created = path.stat().st_ctime
             digest = _load_digest_state(path)
             game = _load_game_state(path)
+            total_questions = sum(
+                len(p.get("questions", [])) for p in game.get("paragraphs", [])
+            )
             entries.append(
                 ProjectEntry(
                     name=path.name,
@@ -167,6 +172,7 @@ class FileManager:
                     digest_total_chunks=digest["total_chunks"],
                     digest_chunks_processed=digest["chunks_processed"],
                     digest_total_keywords=digest["total_keywords"],
+                    digest_total_questions=total_questions,
                     digest_title=digest.get("title", ""),
                     digest_language=digest.get("language", ""),
                     digest_error=digest["error"],

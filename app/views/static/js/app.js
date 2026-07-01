@@ -37,16 +37,28 @@
             const project = button.getAttribute("data-project") || "";
             const title = button.getAttribute("data-digest-title") || project;
             const language = button.getAttribute("data-digest-language") || "";
+            const words = button.getAttribute("data-digest-total-words") || "0";
+            const chunks = button.getAttribute("data-digest-total-chunks") || "0";
+            const keywords = button.getAttribute("data-digest-total-keywords") || "0";
+            const questions = button.getAttribute("data-digest-total-questions") || "0";
             const titleInput = modal.querySelector("#renameInput");
             const languageInput = modal.querySelector("#languageInput");
             const form = modal.querySelector("#renameForm");
             const resetBtn = modal.querySelector(".reset-progress-btn");
             const deleteForm = modal.querySelector("#deleteForm");
+            const infoWords = modal.querySelector("#infoWords");
+            const infoChunks = modal.querySelector("#infoChunks");
+            const infoKeywords = modal.querySelector("#infoKeywords");
+            const infoQuestions = modal.querySelector("#infoQuestions");
             if (titleInput) titleInput.value = title;
             if (languageInput) languageInput.value = language;
             if (form) form.action = "/files/" + encodeURIComponent(project) + "/rename";
             if (resetBtn) resetBtn.dataset.project = project;
             if (deleteForm) deleteForm.action = "/files/" + encodeURIComponent(project) + "/delete";
+            if (infoWords) infoWords.textContent = words;
+            if (infoChunks) infoChunks.textContent = chunks;
+            if (infoKeywords) infoKeywords.textContent = keywords;
+            if (infoQuestions) infoQuestions.textContent = questions;
         });
     }
 

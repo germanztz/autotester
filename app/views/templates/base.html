@@ -12,23 +12,11 @@
 <body>
     {% include "partials/toasts.html" %}
 
-    <nav class="navbar navbar-expand-lg fixed-top app-navbar">
+    <nav class="navbar fixed-top app-navbar">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="{{ url_for('main.index') }}">
-                <i class="bi bi-robot"></i> autotester
+                <i class="bi bi-robot"></i> autotester<span id="navbar-project-title" class="navbar-project-title"></span>
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="mainNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('config.show') }}">
-                            <i class="bi bi-gear"></i>
-                        </a>
-                    </li>
-                </ul>
-            </div>
         </div>
     </nav>
 
@@ -59,11 +47,30 @@
                             <label class="form-label">Title</label>
                             <input type="text" class="form-control" name="title" id="renameInput" required>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Language</label>
-                            <input type="text" class="form-control" name="language" id="languageInput" placeholder="e.g. en, es, fr, de...">
-                        </div>
-                    </form>
+                    <div class="mb-3">
+                        <label class="form-label">Language</label>
+                        <input type="text" class="form-control" name="language" id="languageInput" placeholder="e.g. en, es, fr, de...">
+                    </div>
+                </form>
+                <hr>
+                <div class="project-info small text-muted mb-2">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Words</span>
+                        <span id="infoWords" class="fw-semibold">0</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Paragraphs (chunks)</span>
+                        <span id="infoChunks" class="fw-semibold">0</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Concepts (keywords)</span>
+                        <span id="infoKeywords" class="fw-semibold">0</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Questions</span>
+                        <span id="infoQuestions" class="fw-semibold">0</span>
+                    </div>
+                </div>
                     <hr>
                     <button type="button" class="btn btn-outline-danger btn-sm w-100 reset-progress-btn" data-project="">
                         <i class="bi bi-arrow-counterclockwise"></i> Reset progress

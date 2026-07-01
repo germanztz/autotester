@@ -1,6 +1,7 @@
 :root {
     --app-navbar-height: 56px;
     --app-sidebar-width: 300px;
+    --app-sidebar-collapsed-width: 48px;
 }
 
 body {
@@ -23,8 +24,81 @@ body {
     flex-shrink: 0;
     background-color: var(--bs-tertiary-bg);
     border-right: 1px solid var(--bs-border-color);
-    overflow-y: auto;
     max-height: calc(100vh - var(--app-navbar-height));
+    transition: width 0.2s ease;
+}
+
+.app-sidebar.collapsed {
+    width: var(--app-sidebar-collapsed-width);
+    overflow: hidden;
+}
+
+.app-sidebar.collapsed .sidebar-header {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+    border-bottom-color: transparent;
+}
+
+.app-sidebar.collapsed .sidebar-header .sidebar-title {
+    display: none;
+}
+
+.app-sidebar.collapsed .sidebar-header .upload-trigger {
+    display: none;
+}
+
+.app-sidebar.collapsed .project-item {
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.app-sidebar.collapsed .project-item .me-2 {
+    margin-right: 0 !important;
+}
+
+.app-sidebar.collapsed .project-item > div {
+    justify-content: center;
+}
+
+.app-sidebar.collapsed .project-item .flex-grow-1 {
+    display: none;
+}
+
+.app-sidebar.collapsed .project-item .project-actions {
+    display: none;
+}
+
+.app-sidebar.collapsed .sidebar-actionbar {
+    justify-content: center;
+    padding: 0.5rem;
+}
+
+.app-sidebar.collapsed .sidebar-actionbar a span {
+    display: none;
+}
+
+.app-sidebar.collapsed .empty-state-text {
+    display: none;
+}
+
+.sidebar-actionbar {
+    background-color: var(--bs-body-bg);
+}
+
+.sidebar-actionbar a:hover {
+    color: var(--bs-primary) !important;
+}
+
+.sidebar-toggle {
+    color: var(--bs-secondary-color);
+    line-height: 1;
+}
+
+.sidebar-toggle:hover {
+    color: var(--bs-primary);
 }
 
 .app-main {
@@ -227,17 +301,11 @@ body {
 
 /* ====== Responsive ====== */
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
     .chat-bubble {
         max-width: 80%;
     }
-    .app-shell {
-        flex-direction: column;
-    }
-    .app-sidebar {
-        width: 100%;
-        max-height: 40vh;
-        border-right: none;
-        border-bottom: 1px solid var(--bs-border-color);
+    .app-sidebar.collapsed {
+        width: var(--app-sidebar-collapsed-width);
     }
 }

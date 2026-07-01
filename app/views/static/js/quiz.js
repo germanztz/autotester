@@ -124,7 +124,6 @@
         hideInput();
         var cm = $("chat-messages");
         if (!cm) return;
-        $("panel-title").innerHTML = '<i class="bi bi-robot"></i> autotester';
         cm.innerHTML =
             '<div class="text-center text-muted py-5" id="welcome-placeholder">' +
             '<i class="bi bi-folder2-open d-block fs-1 mb-3"></i>' +
@@ -133,8 +132,6 @@
     }
 
     function renderStartView(projectName, displayName) {
-        $("panel-title").innerHTML =
-            '<i class="bi bi-file-earmark-text"></i> ' + escapeHtml(displayName);
         var cm = $("chat-messages");
         if (cm) cm.innerHTML = "";
         addBubble("bot",
@@ -373,9 +370,6 @@
             currentProject = projectName;
             currentDisplayName = displayName;
             _resetUI();
-
-            $("panel-title").innerHTML =
-                '<i class="bi bi-file-earmark-text"></i> ' + escapeHtml(displayName);
 
             apiCall("GET", "/game/" + encodeURIComponent(projectName) + "/status", null, function (data) {
                 if (data.status === "not_started") {
