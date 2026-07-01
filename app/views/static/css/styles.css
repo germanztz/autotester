@@ -247,6 +247,7 @@ body {
 
 .chat-option-btn {
     flex: 1 1 auto;
+    text-transform: capitalize;
 }
 
 .chat-text-input {
