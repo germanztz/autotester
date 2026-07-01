@@ -17,35 +17,40 @@ from app.utils.logging_setup import VALID_LOG_LEVELS
 VALID_THEMES = ("light", "dark", "system")
 
 _DEFAULT_SYSTEM_PROMPT = (
-    "You are a precise document analyst. Analyze the provided text, understand "
-    "its content and structure, and respond only with valid JSON (no markdown, no extra text)."
+    'You are a precise document analyst.\n'
+    'Analyze the provided text, understand its content and structure.\n'
+    'Return ONLY valid JSON (no markdown, no extra text).\n'
 )
 
 _DEFAULT_USER_PROMPT_TPL = (
-    'Extract 1 to 10 keywords that represent the main topics from the following text.\n\n'
-    'Text:\n{text}\n\n'
-    '{{"text_keywords": ["kw1", "kw2", ...]}}\n\n'
+    'Based on the following text, extract 1 to 10 keywords that represent the main topics.\n'
+    'Text:\n'
+    '{text}\n\n'
+    'Return ONLY valid JSON conforming to this schema:\n'
+    '{{"text_keywords": ["kw1", "kw2", ...]}}\n'
     'If no meaningful keywords can be extracted, return:\n'
     '{{"text_keywords": []}}'
 )
 
 _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL = (
-    'Generate a true/false question in language "{language}" based on the following text. '
-    'The question must target the keyword "{keyword}" and the correct answer '
-    'must be "{target_response}". '
-    'Do NOT copy phrases from the original text - rephrase the concept in your own words. '
-    'Return ONLY valid JSON conforming to this schema (no markdown, no extra text):\n'
-    '{{"type": "true_false", "question": "your rephrased statement here", "correct_answer": "{target_response}"}}\n\n'
-    'Text:\n{text}'
+    'Based on the following text, Generate a true/false question in language "{language}".\n'
+    'The question must target the keyword "{keyword}".\n'
+    'The correct answer must be "{target_response}".\n'
+    'Do NOT copy phrases from the original text - rephrase the concept in your own words.\n'
+    'Text:\n'
+    '{text}\n\n'
+    'Return ONLY valid JSON conforming to this schema:\n'
+    '{{"type": "true_false", "question": "your rephrased statement here", "correct_answer": "{target_response}"}}'
 )
 
 _DEFAULT_TITLE_USER_PROMPT_TPL = (
-    "Based on the following text, generate a short title of 1 to 7 words "
-    "that represents the project and detect the language of the text.\n"
+    'Based on the following text, generate a short title of 1 to 7 words.\n'
+    'that represents the main subject of the text, use expressive emojis; \n'
+    'also, detect the language of the text.\n'
+    'Text:\n'
+    '{text}\n\n'
     'Return ONLY valid JSON conforming to this schema:\n'
-    '{{"title": "short descriptive title (may include emojis)", '
-    '"language": "ISO 639-1 code (e.g., en, es, fr, de, pt, it)"}}\n\n'
-    "{text}"
+    '{{"title": "short descriptive title with emojis", "language": "ISO 639-1 code (e.g., en, es, fr, de, pt, it)"}}'
 )
 
 IA_DEFAULTS: dict[str, Any] = {
