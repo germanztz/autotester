@@ -96,6 +96,9 @@ class ProjectEntry:
     digest_chunks_processed: int = 0
     digest_total_keywords: int = 0
     digest_total_questions: int = 0
+    digest_reading_check: int = 0
+    digest_fill_gap: int = 0
+    digest_true_false: int = 0
     digest_title: str = ""
     digest_language: str = ""
     digest_error: str | None = None
@@ -114,6 +117,9 @@ class ProjectEntry:
             "digest_chunks_processed": self.digest_chunks_processed,
             "digest_total_keywords": self.digest_total_keywords,
             "digest_total_questions": self.digest_total_questions,
+            "digest_reading_check": self.digest_reading_check,
+            "digest_fill_gap": self.digest_fill_gap,
+            "digest_true_false": self.digest_true_false,
             "digest_title": self.digest_title,
             "digest_language": self.digest_language,
             "digest_error": self.digest_error,
@@ -158,9 +164,13 @@ class FileManager:
             created = path.stat().st_ctime
             digest = _load_digest_state(path)
             game = _load_game_state(path)
-            total_questions = sum(
-                len(p.get("questions", [])) for p in game.get("paragraphs", [])
-            )
+            all_questions = [
+                q for p in game.get("paragraphs", []) for q in p.get("questions", [])
+            ]
+            total_questions = len(all_questions)
+            rc_count = sum(1 for q in all_questions if q.get("question_type") == "options_choice")
+            fg_count = sum(1 for q in all_questions if q.get("question_type") == "fill_gap")
+            tf_count = sum(1 for q in all_questions if q.get("question_type") == "true_false")
             entries.append(
                 ProjectEntry(
                     name=path.name,
@@ -173,6 +183,9 @@ class FileManager:
                     digest_chunks_processed=digest["chunks_processed"],
                     digest_total_keywords=digest["total_keywords"],
                     digest_total_questions=total_questions,
+                    digest_reading_check=rc_count,
+                    digest_fill_gap=fg_count,
+                    digest_true_false=tf_count,
                     digest_title=digest.get("title", ""),
                     digest_language=digest.get("language", ""),
                     digest_error=digest["error"],

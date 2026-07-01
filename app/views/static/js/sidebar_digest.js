@@ -167,6 +167,13 @@
                                 data-project="${escapeHtml(p.name)}"
                                 data-digest-title="${escapeHtml(disp)}"
                                 data-digest-language="${escapeHtml(p.digest_language || '')}"
+                                data-digest-total-words="${p.digest_total_words}"
+                                data-digest-total-chunks="${p.digest_total_chunks}"
+                                data-digest-total-keywords="${p.digest_total_keywords}"
+                                data-digest-total-questions="${p.digest_total_questions}"
+                                data-digest-total-rc="${p.digest_reading_check}"
+                                data-digest-total-fillgap="${p.digest_fill_gap}"
+                                data-digest-total-tf="${p.digest_true_false}"
                                 title="Project options">
                             <i class="bi bi-pencil"></i>
                         </button>

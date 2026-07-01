@@ -130,3 +130,6 @@ class TestProjectEntry:
         assert d["pdf_count"] == 2
         assert d["size_bytes"] == 1024
         assert isinstance(d["created_at"], float)
+        assert d["digest_reading_check"] == 0
+        assert d["digest_fill_gap"] == 0
+        assert d["digest_true_false"] == 0

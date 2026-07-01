@@ -148,6 +148,38 @@ class TestListProjectsWithDigestState:
         assert entries[0].game_progress > 0
         assert entries[0].game_progress <= 100.0
 
+    def test_per_type_question_counts(self, temp_workspace):
+        fm = FileManager(temp_workspace["projects"])
+        proj = temp_workspace["projects"] / "typed"
+        proj.mkdir()
+        (proj / "x.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
+        _write_state(proj, state="complete")
+        game_state = {
+            "project_name": "typed",
+            "paragraphs": [
+                {
+                    "index": 0,
+                    "unlocked": True,
+                    "questions": [
+                        {"question_type": "options_choice", "question_text": "rc1", "correct_answer": "a"},
+                        {"question_type": "fill_gap", "question_text": "fg1", "correct_answer": "b"},
+                        {"question_type": "fill_gap", "question_text": "fg2", "correct_answer": "c"},
+                        {"question_type": "true_false", "question_text": "tf1", "correct_answer": "true"},
+                        {"question_type": "true_false", "question_text": "tf2", "correct_answer": "false"},
+                        {"question_type": "true_false", "question_text": "tf3", "correct_answer": "true"},
+                    ],
+                },
+            ],
+            "updated_at": 1000.0,
+        }
+        (proj / "game_state.json").write_text(json.dumps(game_state), encoding="utf-8")
+        entries = fm.list_projects()
+        e = entries[0]
+        assert e.digest_total_questions == 6
+        assert e.digest_reading_check == 1
+        assert e.digest_fill_gap == 2
+        assert e.digest_true_false == 3
+
     def test_game_progress_from_dict_includes_field(self, temp_workspace):
         fm = FileManager(temp_workspace["projects"])
         proj = temp_workspace["projects"] / "gamedict"

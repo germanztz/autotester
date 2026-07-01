@@ -468,6 +468,7 @@ class LazyAIManager:
                 ca = [ca] if ca else []
             existing.append(QuestionRecord(
                 id=max_id,
+                title="True or False",
                 question_type=q_dict["type"],
                 question_text=q_dict["question"],
                 options=q_dict.get("options", []),
