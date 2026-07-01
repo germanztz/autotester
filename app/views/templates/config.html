@@ -119,19 +119,6 @@
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label collapsed-prompt-label" role="button" data-bs-toggle="collapse" data-bs-target="#collapseMixedPrompt" aria-expanded="false">
-                    <i class="bi bi-chevron-right small me-1"></i> Mixed question prompt
-                </label>
-                <div id="collapseMixedPrompt" class="collapse">
-                    <textarea class="form-control font-monospace" id="question_mixed_user_prompt_tpl" name="question_mixed_user_prompt_tpl" rows="10">{{ app_config.ia.question_mixed_user_prompt_tpl }}</textarea>
-                    <div class="form-text">
-                        Sent once per chunk to generate mixed-type questions (multiple choice, options choice,
-                        fill blank, short answer). Use <code>{count}</code>, <code>{language}</code>,
-                        <code>{keywords}</code>, and <code>{text}</code> as placeholders.
-                    </div>
-                </div>
-            </div>
-            <div class="mb-3">
                 <label class="form-label collapsed-prompt-label" role="button" data-bs-toggle="collapse" data-bs-target="#collapseTFPrompt" aria-expanded="false">
                     <i class="bi bi-chevron-right small me-1"></i> True/False question prompt
                 </label>

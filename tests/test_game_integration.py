@@ -32,12 +32,7 @@ def _ensure_chunks(projects_dir: Path, name: str, num_chunks: int = 2):
 
 def _fake_questions_llm(*args, **kwargs):
     """Canned LLM response for question generation."""
-    return json.dumps([
-        {"type": "multiple_choice", "question": "Test Q?", "options": ["A", "B", "C"], "correct_answer": "A"},
-        {"type": "options_choice", "question": "Is it true?", "correct_answer": "true"},
-        {"type": "fill_blank", "question": "Fill the ___", "correct_answer": "blank"},
-        {"type": "short_answer", "question": "What is the answer?", "correct_answer": "answer"},
-    ])
+    return json.dumps({"type": "true_false", "question": "Test Q?", "correct_answer": "true"})
 
 
 def _patch_segmenter_ollama(client):
@@ -98,18 +93,18 @@ class TestGameIntegration:
         proj_name = _upload_and_digest(client, "e2e_start")
         _ensure_chunks(temp_workspace["projects"], proj_name, 2)
 
-        resp = client.post(f"/game/{proj_name}/start")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data is not None
-        assert data["status"] in ("generating", "ready")
-
+        # Init game directly (bypass /start to avoid background job race).
         from flask import current_app
         with client.application.app_context():
-            engine = current_app.extensions["question_engine"]
-            result = engine.generate_all_questions(proj_name)
-            assert result["status"] == "ready"
-            assert result["generated"] == 2
+            mgr = current_app.extensions["game_manager"]
+            mgr.init_game(proj_name, 2)
+            mgr.store_questions(proj_name, 0, [
+                {"type": "true_false", "question": "Q1?", "correct_answer": "true"},
+                {"type": "true_false", "question": "Q2?", "correct_answer": "false"},
+            ])
+            mgr.store_questions(proj_name, 1, [
+                {"type": "true_false", "question": "Q3?", "correct_answer": "true"},
+            ])
 
         status_resp = client.get(f"/game/{proj_name}/status")
         status_data = status_resp.get_json()
@@ -121,12 +116,15 @@ class TestGameIntegration:
         _patch_segmenter_ollama(client)
         proj_name = _upload_and_digest(client, "e2e_correct")
         _ensure_chunks(temp_workspace["projects"], proj_name, 1)
-        client.post(f"/game/{proj_name}/start")
 
         from flask import current_app
         with client.application.app_context():
-            engine = current_app.extensions["question_engine"]
-            engine.generate_all_questions(proj_name)
+            mgr = current_app.extensions["game_manager"]
+            mgr.init_game(proj_name, 1)
+            mgr.store_questions(proj_name, 0, [
+                {"type": "true_false", "question": "Q1?", "correct_answer": "true"},
+                {"type": "true_false", "question": "Q2?", "correct_answer": "false"},
+            ])
 
         next_resp = client.get(f"/game/{proj_name}/next")
         assert next_resp.status_code == 200
@@ -135,12 +133,22 @@ class TestGameIntegration:
         before_resp = client.get(f"/game/{proj_name}/status")
         before_pct = before_resp.get_json()["progress_pct"]
 
+        from flask import current_app
+        with client.application.app_context():
+            mgr = current_app.extensions["game_manager"]
+            state = mgr.load_state(proj_name)
+            if state is not None:
+                q = state.paragraphs[q_data["para_idx"]].questions[q_data["q_idx"]]
+                correct = q.correct_answer[0]
+            else:
+                correct = "true"
+
         answer_resp = client.post(
             f"/game/{proj_name}/answer",
             data=json.dumps({
                 "para_idx": q_data["para_idx"],
                 "q_idx": q_data["q_idx"],
-                "answer": "A" if q_data.get("options") else "answer",
+                "answer": correct,
             }),
             content_type="application/json",
         )
@@ -155,12 +163,14 @@ class TestGameIntegration:
         _patch_segmenter_ollama(client)
         proj_name = _upload_and_digest(client, "e2e_wrong")
         _ensure_chunks(temp_workspace["projects"], proj_name, 1)
-        client.post(f"/game/{proj_name}/start")
 
         from flask import current_app
         with client.application.app_context():
-            engine = current_app.extensions["question_engine"]
-            engine.generate_all_questions(proj_name)
+            mgr = current_app.extensions["game_manager"]
+            mgr.init_game(proj_name, 1)
+            mgr.store_questions(proj_name, 0, [
+                {"type": "true_false", "question": "Q1?", "correct_answer": "true"},
+            ])
 
         next_resp = client.get(f"/game/{proj_name}/next")
         q_data = next_resp.get_json()
@@ -187,29 +197,40 @@ class TestGameIntegration:
         _patch_segmenter_ollama(client)
         proj_name = _upload_and_digest(client, "e2e_unlock")
         _ensure_chunks(temp_workspace["projects"], proj_name, 2)
-        client.post(f"/game/{proj_name}/start")
 
+        # Init game state directly (bypass start API so no background job).
         from flask import current_app
         with client.application.app_context():
-            engine = current_app.extensions["question_engine"]
-            engine.generate_all_questions(proj_name)
+            mgr = current_app.extensions["game_manager"]
+            mgr.init_game(proj_name, 2)
+            mgr.store_questions(proj_name, 0, [
+                {"type": "true_false", "question": "Q1?", "correct_answer": "true"},
+                {"type": "true_false", "question": "Q2?", "correct_answer": "true"},
+            ])
+            mgr.store_questions(proj_name, 1, [
+                {"type": "true_false", "question": "Q3?", "correct_answer": "false"},
+            ])
 
-        mgr = current_app.extensions["game_manager"]
-        state = mgr.load_state(proj_name)
+            state = mgr.load_state(proj_name)
         assert state is not None
         assert state.paragraphs[0].unlocked is True
         assert state.paragraphs[1].unlocked is False
 
         # Set all para 0 questions as answered correctly at least once.
+        with client.application.app_context():
+            state = mgr.load_state(proj_name)
         for q in state.paragraphs[0].questions:
             q.correct_count = 1
             q.last_seen = 1.0
-        mgr.save_state(proj_name, state)
+        with client.application.app_context():
+            mgr.save_state(proj_name, state)
 
         # Submit one answer via API to trigger unlock check in submit_answer.
         next_resp = client.get(f"/game/{proj_name}/next")
         n_data = next_resp.get_json()
         pi, qi = n_data["para_idx"], n_data["q_idx"]
+        with client.application.app_context():
+            state = mgr.load_state(proj_name)
         correct = state.paragraphs[pi].questions[qi].correct_answer[0]
         client.post(
             f"/game/{proj_name}/answer",
@@ -217,7 +238,8 @@ class TestGameIntegration:
             content_type="application/json",
         )
 
-        state = mgr.load_state(proj_name)
+        with client.application.app_context():
+            state = mgr.load_state(proj_name)
         assert state is not None
         assert state.paragraphs[1].unlocked is True
 
@@ -227,22 +249,34 @@ class TestGameIntegration:
         _patch_segmenter_ollama(client)
         proj_name = _upload_and_digest(client, "e2e_reset")
         _ensure_chunks(temp_workspace["projects"], proj_name, 1)
-        client.post(f"/game/{proj_name}/start")
 
+        # Init game directly (bypass /start to avoid background job race).
         from flask import current_app
         with client.application.app_context():
-            engine = current_app.extensions["question_engine"]
-            engine.generate_all_questions(proj_name)
+            mgr = current_app.extensions["game_manager"]
+            mgr.init_game(proj_name, 1)
+            mgr.store_questions(proj_name, 0, [
+                {"type": "true_false", "question": "Q1?", "correct_answer": "true"},
+            ])
 
         # Answer one question correctly.
         next_resp = client.get(f"/game/{proj_name}/next")
         q_data = next_resp.get_json()
+        from flask import current_app
+        with client.application.app_context():
+            mgr = current_app.extensions["game_manager"]
+            state = mgr.load_state(proj_name)
+            if state is not None:
+                q = state.paragraphs[q_data["para_idx"]].questions[q_data["q_idx"]]
+                correct = q.correct_answer[0]
+            else:
+                correct = "true"
         client.post(
             f"/game/{proj_name}/answer",
             data=json.dumps({
                 "para_idx": q_data["para_idx"],
                 "q_idx": q_data["q_idx"],
-                "answer": "A" if q_data.get("options") else "answer",
+                "answer": correct,
             }),
             content_type="application/json",
         )

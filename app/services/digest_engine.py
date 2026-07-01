@@ -336,9 +336,8 @@ class LazyAIManager:
         Two-phase approach:
           Phase 1 — save programmatic questions (Reading Check + Fill the Gap)
                      immediately so the user can start playing.
-          Phase 2 — generate LLM questions (multiple_choice, fill_blank,
-                     short_answer, true_false) and append them. Failures
-                     are non-fatal — programmatic Qs are already saved.
+          Phase 2 — generate LLM questions (true_false) and append them.
+                     Failures are non-fatal — programmatic Qs are already saved.
         """
         if self.game_manager is None:
             return
@@ -441,14 +440,6 @@ class LazyAIManager:
             cfg = self.config_manager.load()
             game_cfg = cfg.get("game", {})
             language = game_cfg.get("language", "es")
-            qpp = game_cfg.get("questions_per_paragraph", 5)
-
-            llm_questions = self.question_generator.generate(
-                chunk_text=chunk_text,
-                keywords=keywords,
-                count=qpp,
-                language=language,
-            )
 
             tf_questions = self.question_generator.generate_true_false_questions(
                 chunk_text=chunk_text,
@@ -470,7 +461,7 @@ class LazyAIManager:
         existing = list(state.paragraphs[chunk_idx].questions)
         max_id = max((q.id for p in state.paragraphs for q in p.questions), default=0)
 
-        for q_dict in llm_questions + tf_questions:
+        for q_dict in tf_questions:
             max_id += 1
             ca = q_dict.get("correct_answer", "")
             if isinstance(ca, str):
@@ -487,7 +478,7 @@ class LazyAIManager:
         self.game_manager.save_state(project_name, state)
         logger.debug(
             "Phase 2 — appended %d LLM question(s) for chunk %d of %s",
-            len(llm_questions) + len(tf_questions), chunk_idx, project_name,
+            len(tf_questions), chunk_idx, project_name,
         )
 
     def _resolve_page_number(self, word_idx: int, page_ranges: list[tuple[int, int, int]]) -> int:

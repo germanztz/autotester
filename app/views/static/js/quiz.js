@@ -302,8 +302,8 @@
 
     function startGame(projectName) {
         hideInput();
-        showTyping();
         apiCall("POST", "/game/" + encodeURIComponent(projectName) + "/start", null, function (data) {
+            showTyping();
             if (data.status === "ready") {
                 loadNextQuestion(projectName);
             } else {

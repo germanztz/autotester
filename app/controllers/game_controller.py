@@ -25,6 +25,11 @@ def start(project_name: str):
     engine = _get_engine()
     try:
         result = engine.start_game(project_name)
+        if result.get("status") == "generating":
+            lazy_ai = current_app.extensions.get("lazy_ai_manager")
+            job_runner = current_app.extensions.get("job_runner")
+            if lazy_ai and job_runner:
+                job_runner.submit(lazy_ai.ensure_questions_generated, project_name)
         return jsonify(result), 200
     except FileNotFoundError as exc:
         logger.warning("Game start failed: %s", exc)
@@ -85,7 +90,7 @@ def next_question(project_name: str):
         "question": question.question_text,
         "progress_pct": engine.game_manager.calculate_progress(state),
     }
-    if question.question_type in ("multiple_choice", "options_choice", "fill_gap", "true_false"):
+    if question.question_type in ("options_choice", "fill_gap", "true_false"):
         if question.question_type == "true_false":
             opts = ["True", "False"]
             random.shuffle(opts)

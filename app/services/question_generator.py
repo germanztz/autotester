@@ -7,7 +7,6 @@ from typing import Any, Optional
 
 from app.models.config_manager import (
     _DEFAULT_SYSTEM_PROMPT,
-    _DEFAULT_QUESTION_MIXED_USER_PROMPT_TPL,
     _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL,
 )
 from app.utils.logging_setup import get_logger
@@ -24,84 +23,6 @@ class QuestionGenerator:
     def __init__(self, llm_client: Any, config_manager: Any) -> None:
         self.llm = llm_client
         self.config_manager = config_manager
-
-    def generate(
-        self,
-        chunk_text: str,
-        keywords: list[str],
-        count: int = 5,
-        language: str = "es",
-        model: Optional[str] = None,
-    ) -> list[dict[str, Any]]:
-        """Generate quiz questions from a text chunk.
-
-        Args:
-            chunk_text: The paragraph text.
-            keywords: Extracted keywords for this chunk.
-            count: Number of questions to generate.
-            language: Language code for questions (e.g., "es", "en").
-            model: Ollama model name. Falls back to game config, then IA config.
-
-        Returns:
-            List of question dicts with keys: type, question, options?, correct_answer.
-
-        Raises:
-            RuntimeError: If the LLM fails after all retries or returns invalid JSON.
-        """
-        if not model:
-            cfg = self.config_manager.load()
-            ia_cfg = cfg.get("ia", {})
-            model = ia_cfg.get("ollama_model", None)
-
-        cfg = self.config_manager.load()
-        tpl = cfg.get("ia", {}).get(
-            "question_mixed_user_prompt_tpl",
-            _DEFAULT_QUESTION_MIXED_USER_PROMPT_TPL,
-        )
-        prompt = tpl.format(
-            count=count,
-            language=language,
-            keywords=", ".join(keywords),
-            text=chunk_text,
-        )
-
-        last_error: Optional[str] = None
-        for attempt in range(1, _MAX_RETRIES + 1):
-            try:
-                raw = self.llm.generate(
-                    model,
-                    prompt,
-                    system=_DEFAULT_SYSTEM_PROMPT,
-                )
-            except Exception as exc:
-                last_error = f"{type(exc).__name__}: {exc}"
-                logger.warning(
-                    "Question generation attempt %d/%d failed: %s",
-                    attempt, _MAX_RETRIES, last_error,
-                )
-                if attempt < _MAX_RETRIES:
-                    time.sleep(_RETRY_DELAY_SECONDS * attempt)
-                continue
-
-            questions = self._parse_response(raw, count)
-            if questions is not None:
-                logger.info(
-                    "Generated %d questions | model=%s language=%s",
-                    len(questions), model, language,
-                )
-                return questions
-
-            last_error = "Invalid JSON response from LLM"
-            logger.warning(
-                "Question generation attempt %d/%d: %s",
-                attempt, _MAX_RETRIES, last_error,
-            )
-            if attempt < _MAX_RETRIES:
-                time.sleep(_RETRY_DELAY_SECONDS * attempt)
-
-        raise RuntimeError(
-            f"Question generation failed after {_MAX_RETRIES} attempts: {last_error}"
-        )
 
     def generate_true_false_questions(
         self,
@@ -223,7 +144,7 @@ class QuestionGenerator:
         if not isinstance(data, list):
             return None
 
-        valid_types = {"multiple_choice", "true_false", "options_choice", "fill_blank", "short_answer"}
+        valid_types = {"true_false"}
         questions: list[dict[str, Any]] = []
         for item in data:
             if not isinstance(item, dict):
@@ -242,12 +163,6 @@ class QuestionGenerator:
                 "question": question_text,
                 "correct_answer": correct_answer,
             }
-            if q_type == "multiple_choice":
-                options = item.get("options", [])
-                if isinstance(options, list) and len(options) >= 2:
-                    entry["options"] = options
-                else:
-                    continue  # skip invalid multiple choice
             questions.append(entry)
 
         return questions if questions else None

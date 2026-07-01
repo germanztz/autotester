@@ -32,12 +32,7 @@ def _make_project_with_chunks(projects_dir: Path, name: str, num_chunks: int = 2
 
 def _fake_questions(*args, **kwargs):
     """Replace LLM.generate() with a canned response."""
-    return json.dumps([
-        {"type": "multiple_choice", "question": "Test Q?", "options": ["A", "B", "C"], "correct_answer": "A"},
-        {"type": "options_choice", "question": "Is it?", "correct_answer": "true"},
-        {"type": "fill_blank", "question": "Fill ___", "correct_answer": "blank"},
-        {"type": "short_answer", "question": "Short?", "correct_answer": "answer"},
-    ])
+    return json.dumps({"type": "true_false", "question": "Test Q?", "correct_answer": "true"})
 
 
 # ---------------------------------------------------------------------------
@@ -88,12 +83,15 @@ class TestNextQuestion:
     @patch("app.models.llm_client.OllamaChatClient.generate", _fake_questions)
     def test_returns_question_after_generation(self, client, temp_workspace: dict):
         _make_project_with_chunks(temp_workspace["projects"], "quizproj", 1)
-        client.post("/game/quizproj/start")
 
+        # Init game and store question directly (bypass /start to avoid background job).
         from flask import current_app
         with client.application.app_context():
-            engine = current_app.extensions["question_engine"]
-            engine.generate_paragraph_questions("quizproj", 0)
+            mgr = current_app.extensions["game_manager"]
+            mgr.init_game("quizproj", 1)
+            mgr.store_questions("quizproj", 0, [
+                {"type": "true_false", "question": "Test Q?", "correct_answer": "true"},
+            ])
 
         resp = client.get("/game/quizproj/next")
         assert resp.status_code == 200
@@ -108,12 +106,14 @@ class TestAnswer:
     @patch("app.models.llm_client.OllamaChatClient.generate", _fake_questions)
     def test_submit_correct_answer(self, client, temp_workspace: dict):
         _make_project_with_chunks(temp_workspace["projects"], "ansproj", 1)
-        client.post("/game/ansproj/start")
 
         from flask import current_app
         with client.application.app_context():
-            engine = current_app.extensions["question_engine"]
-            engine.generate_paragraph_questions("ansproj", 0)
+            mgr = current_app.extensions["game_manager"]
+            mgr.init_game("ansproj", 1)
+            mgr.store_questions("ansproj", 0, [
+                {"type": "true_false", "question": "Test Q?", "correct_answer": ["true"]},
+            ])
 
         next_resp = client.get("/game/ansproj/next")
         next_data = next_resp.get_json()
@@ -123,7 +123,7 @@ class TestAnswer:
             data=json.dumps({
                 "para_idx": next_data["para_idx"],
                 "q_idx": next_data["q_idx"],
-                "answer": "A",
+                "answer": "true",
             }),
             content_type="application/json",
         )
@@ -146,12 +146,14 @@ class TestReset:
     @patch("app.models.llm_client.OllamaChatClient.generate", _fake_questions)
     def test_reset_game(self, client, temp_workspace: dict):
         _make_project_with_chunks(temp_workspace["projects"], "resetproj", 1)
-        client.post("/game/resetproj/start")
 
         from flask import current_app
         with client.application.app_context():
-            engine = current_app.extensions["question_engine"]
-            engine.generate_paragraph_questions("resetproj", 0)
+            mgr = current_app.extensions["game_manager"]
+            mgr.init_game("resetproj", 1)
+            mgr.store_questions("resetproj", 0, [
+                {"type": "true_false", "question": "Q1?", "correct_answer": ["true"]},
+            ])
 
         resp = client.post("/game/resetproj/reset")
         assert resp.status_code == 200
@@ -170,12 +172,15 @@ class TestHistory:
     @patch("app.models.llm_client.OllamaChatClient.generate", _fake_questions)
     def test_history_returns_answered_questions(self, client, temp_workspace: dict):
         _make_project_with_chunks(temp_workspace["projects"], "histproj", 1)
-        client.post("/game/histproj/start")
 
+        # Init game and store question directly (bypass /start to avoid background job).
         from flask import current_app
         with client.application.app_context():
-            engine = current_app.extensions["question_engine"]
-            engine.generate_paragraph_questions("histproj", 0)
+            mgr = current_app.extensions["game_manager"]
+            mgr.init_game("histproj", 1)
+            mgr.store_questions("histproj", 0, [
+                {"type": "true_false", "question": "Test Q?", "correct_answer": ["true"]},
+            ])
 
         next_resp = client.get("/game/histproj/next")
         next_data = next_resp.get_json()
@@ -185,7 +190,7 @@ class TestHistory:
             data=json.dumps({
                 "para_idx": next_data["para_idx"],
                 "q_idx": next_data["q_idx"],
-                "answer": "A",
+                "answer": "true",
             }),
             content_type="application/json",
         )
@@ -198,9 +203,9 @@ class TestHistory:
         assert len(data["history"]) == 1
         entry = data["history"][0]
         assert entry["question_text"] == "Test Q?"
-        assert entry["last_answer"] == "A"
+        assert entry["last_answer"] == "true"
         assert entry["last_answer_correct"] is True
-        assert entry["correct_answer"] == ["A"]
+        assert entry["correct_answer"] == ["true"]
 
     def test_history_empty_when_no_game(self, client, temp_workspace: dict):
         _make_project_with_chunks(temp_workspace["projects"], "nohist", 1)

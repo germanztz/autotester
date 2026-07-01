@@ -16,7 +16,7 @@ logger = get_logger()
 class QuestionRecord:
     """A single question with its progress toward mastery."""
 
-    question_type: str  # multiple_choice | options_choice | fill_blank | short_answer | fill_gap
+    question_type: str  # options_choice | fill_gap | true_false
     question_text: str
     id: int = 0
     title: str = ""

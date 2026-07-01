@@ -30,12 +30,6 @@ class TestIaDefaults:
         assert "{keyword}" in ia["question_true_false_user_prompt_tpl"]
         assert "{target_response}" in ia["question_true_false_user_prompt_tpl"]
         assert "{language}" in ia["question_true_false_user_prompt_tpl"]
-        assert "question_mixed_user_prompt_tpl" in ia
-        assert isinstance(ia["question_mixed_user_prompt_tpl"], str) and ia["question_mixed_user_prompt_tpl"]
-        assert "{count}" in ia["question_mixed_user_prompt_tpl"]
-        assert "{language}" in ia["question_mixed_user_prompt_tpl"]
-        assert "{keywords}" in ia["question_mixed_user_prompt_tpl"]
-        assert "{text}" in ia["question_mixed_user_prompt_tpl"]
 
     def test_ia_defaults_constant_exports_expected_keys(self):
         assert set(IA_DEFAULTS.keys()) == {
@@ -47,7 +41,6 @@ class TestIaDefaults:
             "user_prompt_tpl",
             "title_user_prompt_tpl",
             "question_true_false_user_prompt_tpl",
-            "question_mixed_user_prompt_tpl",
         }
 
 

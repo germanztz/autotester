@@ -135,7 +135,7 @@ class TestListProjectsWithDigestState:
                     "index": 0,
                     "unlocked": True,
                     "questions": [
-                        {"correct_count": 3, "wrong_count": 0, "question_type": "multiple_choice",
+                        {"correct_count": 3, "wrong_count": 0, "question_type": "true_false",
                          "question_text": "q", "correct_answer": "a"},
                     ],
                 },

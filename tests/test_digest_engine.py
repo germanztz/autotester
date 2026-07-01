@@ -47,10 +47,8 @@ class _FakeLLM:
                     "correct_answer": "true",
                 })
             return json.dumps([
-                {"type": "multiple_choice", "question": "LLM MC?", "options": ["A", "B", "C"], "correct_answer": "A"},
-                {"type": "options_choice", "question": "LLM OC?", "correct_answer": "B"},
-                {"type": "fill_blank", "question": "LLM fill ___", "correct_answer": "LLM"},
-                {"type": "short_answer", "question": "LLM SA?", "correct_answer": "answer"},
+                {"type": "true_false", "question": "LLM TF?", "correct_answer": "true"},
+                {"type": "true_false", "question": "LLM TF2?", "correct_answer": "false"},
             ])
 
         # Default — keyword extraction (called by SemanticSegmenter)
@@ -721,8 +719,7 @@ class TestRunToCompletion:
 
 
 class TestLLMQuestionGeneration:
-    """LLM-generated questions (multiple_choice, fill_blank, short_answer,
-    true_false) are appended during Phase 2 of _generate_chunk_questions."""
+    """LLM-generated true_false questions are appended during Phase 2 of _generate_chunk_questions."""
 
     def test_appends_llm_questions_after_programmatic(self, project_with_pdf_and_full_game):
         entry, pdf_path, components = project_with_pdf_and_full_game
@@ -738,11 +735,10 @@ class TestLLMQuestionGeneration:
 
         questions = state.paragraphs[0].questions
         # Phase 1: 1 Reading Check + optional fill_gap (depends on keywords matching)
-        # Phase 2: 4 LLM (MC, OC, fill_blank, short_answer) + N true_false
+        # Phase 2: N true_false questions per keyword
         assert len(questions) > 2  # at least programmatic + some LLM
         types = {q.question_type for q in questions}
         assert "options_choice" in types     # Reading Check
-        assert "multiple_choice" in types     # LLM-generated
         assert "true_false" in types          # LLM-generated
 
     def test_llm_questions_have_valid_types(self, project_with_pdf_and_full_game):
@@ -756,8 +752,7 @@ class TestLLMQuestionGeneration:
 
         state = gm.load_state(entry.name)
         questions = state.paragraphs[0].questions
-        valid = {"options_choice", "fill_gap", "multiple_choice",
-                 "options_choice", "fill_blank", "short_answer", "true_false"}
+        valid = {"options_choice", "fill_gap", "true_false"}
         for q in questions:
             assert q.question_type in valid, f"Unknown type: {q.question_type}"
             assert q.question_text, f"Empty question for {q.question_type}"
@@ -779,7 +774,7 @@ class TestLLMQuestionGeneration:
         reading_checks = [q for q in questions if q.title == "Reading Check"]
         assert len(reading_checks) == 1
         # LLM questions are appended, not replacing Phase 1
-        llm_types = {"multiple_choice", "options_choice", "fill_blank", "short_answer", "true_false"}
+        llm_types = {"true_false"}
         llm_qs = [q for q in questions if q.question_type in llm_types]
         assert len(llm_qs) >= 2
 
@@ -814,9 +809,7 @@ class TestLLMQuestionGeneration:
         state = gm.load_state(entry.name)
         questions = state.paragraphs[0].questions
         types = {q.question_type for q in questions}
-        assert "multiple_choice" not in types
         assert "true_false" not in types
-        assert "fill_blank" not in types
 
     def test_true_false_questions_per_keyword(self, project_with_pdf_and_full_game):
         """Each keyword generates one true_false question."""
@@ -847,7 +840,7 @@ class TestLLMQuestionGeneration:
         seg.config_manager.update_ia(chunk_size=30, chunk_overlap=5)
         lazy.ensure_cache(entry.name, pdf_path)
 
-        with patch.object(lazy.question_generator, "generate", side_effect=RuntimeError("LLM down")):
+        with patch.object(lazy.question_generator, "generate_true_false_questions", side_effect=RuntimeError("LLM down")):
             lazy.process_one_chunk(entry.name)
 
         state = gm.load_state(entry.name)
@@ -897,7 +890,6 @@ class TestBackfillQuestionGeneration:
             for q in p.questions:
                 all_types.add(q.question_type)
         assert "options_choice" in all_types  # Reading Check (Phase 1)
-        assert "multiple_choice" in all_types  # LLM-generated (Phase 2)
         assert "true_false" in all_types       # LLM-generated (Phase 2)
 
     def test_backfill_flag_tracking(self, project_with_pdf_and_full_game):

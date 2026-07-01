@@ -71,7 +71,7 @@ def sample_state() -> GameState:
                 unlocked=True,
                 questions=[
                     QuestionRecord(
-                        question_type="multiple_choice",
+                        question_type="true_false",
                         question_text="Q1?",
                         options=["A", "B", "C"],
                         correct_answer=["A"],
@@ -82,7 +82,7 @@ def sample_state() -> GameState:
                         correct_answer=["true"],
                     ),
                     QuestionRecord(
-                        question_type="fill_blank",
+                        question_type="true_false",
                         question_text="Q3 ___",
                         correct_answer=["answer"],
                     ),
@@ -93,12 +93,12 @@ def sample_state() -> GameState:
                 unlocked=False,
                 questions=[
                     QuestionRecord(
-                        question_type="short_answer",
+                        question_type="true_false",
                         question_text="Q4?",
                         correct_answer=["response"],
                     ),
                     QuestionRecord(
-                        question_type="multiple_choice",
+                        question_type="true_false",
                         question_text="Q5?",
                         options=["X", "Y", "Z"],
                         correct_answer=["Y"],
@@ -122,7 +122,7 @@ def sample_state() -> GameState:
 class TestQuestionRecord:
     def test_is_mastered(self):
         q = QuestionRecord(
-            question_type="multiple_choice",
+            question_type="true_false",
             question_text="test?",
             correct_answer=["A"],
             correct_count=3,
@@ -413,14 +413,14 @@ class TestStoreQuestions:
     def test_store_questions(self, manager: GameManager):
         manager.init_game("storetest", 2)
         questions = [
-            {"type": "multiple_choice", "question": "Test?", "options": ["A", "B"], "correct_answer": ["A"]},
-            {"type": "options_choice", "question": "Is it?", "correct_answer": ["true"]},
+            {"type": "true_false", "question": "Test?", "correct_answer": ["true"]},
+            {"type": "true_false", "question": "Is it?", "correct_answer": ["true"]},
         ]
         manager.store_questions("storetest", 0, questions)
         state = manager.load_state("storetest")
         assert state is not None
         assert len(state.paragraphs[0].questions) == 2
-        assert state.paragraphs[0].questions[0].question_type == "multiple_choice"
+        assert state.paragraphs[0].questions[0].question_type == "true_false"
         assert state.paragraphs[0].questions[1].correct_answer == ["true"]
 
 

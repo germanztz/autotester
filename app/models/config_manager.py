@@ -48,24 +48,6 @@ _DEFAULT_TITLE_USER_PROMPT_TPL = (
     "{text}"
 )
 
-_DEFAULT_QUESTION_MIXED_USER_PROMPT_TPL = (
-    "Based on the following text and its keywords, create {count} questions "
-    "in {language} to help memorize the content. "
-    "Use a mix of question types:\n"
-    '- "multiple_choice": question with 4 options, one correct\n'
-    '- "options_choice": question with several options to choose from\n'
-    '- "fill_blank": sentence with a missing word (use ___ for the blank)\n'
-    '- "short_answer": question answerable in 1-3 words\n\n'
-    "Keywords: {keywords}\n\n"
-    "Text:\n{text}\n\n"
-    "Return ONLY valid JSON — an array of objects conforming to this schema:\n"
-    '{{"type": "multiple_choice"|"options_choice"|"fill_blank"|"short_answer", '
-    '"question": "string", '
-    '"options": ["string", ...], '
-    '"correct_answer": "string"}}\n'
-    'The "options" field is required only for type "multiple_choice".\n'
-)
-
 IA_DEFAULTS: dict[str, Any] = {
     "ollama_url": "http://localhost:11434",
     "ollama_model": "qwen3.5:latest",
@@ -75,7 +57,6 @@ IA_DEFAULTS: dict[str, Any] = {
     "user_prompt_tpl": _DEFAULT_USER_PROMPT_TPL,
     "title_user_prompt_tpl": _DEFAULT_TITLE_USER_PROMPT_TPL,
     "question_true_false_user_prompt_tpl": _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL,
-    "question_mixed_user_prompt_tpl": _DEFAULT_QUESTION_MIXED_USER_PROMPT_TPL,
 }
 
 LOGGING_DEFAULTS: dict[str, Any] = {
@@ -132,12 +113,6 @@ def _validate_ia(ia: dict[str, Any]) -> None:
     for ph in ("{text}", "{keyword}", "{target_response}", "{language}"):
         if ph not in tf_user_prompt:
             raise ValueError(f"question_true_false_user_prompt_tpl must contain the {ph} placeholder")
-    mixed_user_prompt = ia.get("question_mixed_user_prompt_tpl", "")
-    if not isinstance(mixed_user_prompt, str) or not mixed_user_prompt.strip():
-        raise ValueError("question_mixed_user_prompt_tpl must be a non-empty string")
-    for ph in ("{count}", "{language}", "{keywords}", "{text}"):
-        if ph not in mixed_user_prompt:
-            raise ValueError(f"question_mixed_user_prompt_tpl must contain the {ph} placeholder")
 
 
 def _validate_game(game_cfg: dict[str, Any]) -> None:
