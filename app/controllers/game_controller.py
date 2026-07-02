@@ -19,17 +19,18 @@ def _get_engine():
 def start(project_name: str):
     """Start (or resume) a game session for a project.
 
-    If questions have already been generated, returns current status.
-    Otherwise initialises state and begins generation.
+    If questions have not been planned yet, plans them.
+    If pending questions remain, submits sequential generation to JobRunner.
     """
     engine = _get_engine()
     try:
         result = engine.start_game(project_name)
+        if result.get("status") == "error":
+            return jsonify({"error": result.get("error", "Unknown error")}), 404
         if result.get("status") == "generating":
-            lazy_ai = current_app.extensions.get("lazy_ai_manager")
             job_runner = current_app.extensions.get("job_runner")
-            if lazy_ai and job_runner:
-                job_runner.submit(lazy_ai.ensure_questions_generated, project_name)
+            if job_runner:
+                job_runner.submit(engine.generate_all_questions, project_name)
         return jsonify(result), 200
     except FileNotFoundError as exc:
         logger.warning("Game start failed: %s", exc)
@@ -55,16 +56,17 @@ def status(project_name: str):
 def next_question(project_name: str):
     """Return the next question for the user.
 
-    Returns the question data (excluding correct_answer) so the
-    client can display it. The answer is verified server-side.
+    Only ``status == "generated"`` questions are eligible.
     """
     engine = _get_engine()
     state = engine.game_manager.load_state(project_name)
     if state is None:
         return jsonify({"error": "Game not started. Call /game/<name>/start first."}), 400
 
-    total_questions = sum(len(p.questions) for p in state.paragraphs)
-    if total_questions == 0:
+    total = sum(
+        1 for p in state.paragraphs for q in p.questions if q.status == "generated"
+    )
+    if total == 0:
         return jsonify({"status": "generating", "message": "Questions are being generated."}), 202
 
     result = engine.game_manager.get_next_question(state)
@@ -72,13 +74,10 @@ def next_question(project_name: str):
         stats = engine.game_manager.get_stats(state)
         if engine.game_manager.has_unprocessed_paragraphs(state):
             return jsonify({"status": "waiting", **stats}), 200
-        # Check if the digest is still running or a question-generation
-        # backfill job is in progress (LLM questions pending).
-        lazy = current_app.extensions.get("lazy_ai_manager")
-        if lazy:
-            dstate = lazy.project_status(project_name)
-            if dstate.get("state") in ("processing", "queued") or lazy.is_question_generation_active(project_name):
-                return jsonify({"status": "waiting", **stats}), 200
+        if engine.is_generation_active(project_name):
+            return jsonify({"status": "waiting", **stats}), 200
+        if engine._is_digest_active(project_name):
+            return jsonify({"status": "waiting", **stats}), 200
         return jsonify({"status": "complete", **stats}), 200
 
     para_idx, q_idx, question = result
@@ -90,7 +89,7 @@ def next_question(project_name: str):
         "question": question.question_text,
         "progress_pct": engine.game_manager.calculate_progress(state),
     }
-    if question.question_type in ("options_choice", "fill_gap", "true_false"):
+    if question.question_type in ("info", "fill", "true_false"):
         if question.question_type == "true_false":
             opts = ["True", "False"]
             random.shuffle(opts)

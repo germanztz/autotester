@@ -62,7 +62,10 @@ def manager(fake_file_manager, fake_config_manager) -> GameManager:
 
 @pytest.fixture
 def sample_state() -> GameState:
-    """A game state with 2 paragraphs, 3 questions each, first para unlocked."""
+    """A game state with 2 paragraphs, 3 questions each, first para unlocked.
+
+    All questions have ``status="generated"`` so they are eligible for play.
+    """
     return GameState(
         project_name="testproj",
         paragraphs=[
@@ -75,16 +78,19 @@ def sample_state() -> GameState:
                         question_text="Q1?",
                         options=["A", "B", "C"],
                         correct_answer=["A"],
+                        status="generated",
                     ),
                     QuestionRecord(
                         question_type="true_false",
                         question_text="Q2?",
                         correct_answer=["true"],
+                        status="generated",
                     ),
                     QuestionRecord(
                         question_type="true_false",
                         question_text="Q3 ___",
                         correct_answer=["answer"],
+                        status="generated",
                     ),
                 ],
             ),
@@ -96,17 +102,20 @@ def sample_state() -> GameState:
                         question_type="true_false",
                         question_text="Q4?",
                         correct_answer=["response"],
+                        status="generated",
                     ),
                     QuestionRecord(
                         question_type="true_false",
                         question_text="Q5?",
                         options=["X", "Y", "Z"],
                         correct_answer=["Y"],
+                        status="generated",
                     ),
                     QuestionRecord(
                         question_type="true_false",
                         question_text="Q6?",
                         correct_answer=["false"],
+                        status="generated",
                     ),
                 ],
             ),
@@ -156,6 +165,9 @@ class TestQuestionRecord:
         d = q.to_dict()
         assert d["id"] == 42
         assert d["title"] == "Reading Check"
+        assert d["status"] == "pending"
+        assert d["keyword"] == ""
+        assert d["chunk_index"] == 0
 
     def test_from_dict_includes_id_and_title(self):
         data = {
@@ -164,10 +176,16 @@ class TestQuestionRecord:
             "question_type": "true_false",
             "question_text": "Read the text?",
             "correct_answer": "true",
+            "status": "generated",
+            "keyword": "kw",
+            "chunk_index": 2,
         }
         q = QuestionRecord.from_dict(data)
         assert q.id == 7
         assert q.title == "Comprehension"
+        assert q.status == "generated"
+        assert q.keyword == "kw"
+        assert q.chunk_index == 2
 
     def test_from_dict_missing_id_title_defaults(self):
         data = {
@@ -178,6 +196,9 @@ class TestQuestionRecord:
         q = QuestionRecord.from_dict(data)
         assert q.id == 0
         assert q.title == ""
+        assert q.status == "pending"
+        assert q.keyword == ""
+        assert q.chunk_index == 0
 
 
 # ---------------------------------------------------------------------------
@@ -193,11 +214,11 @@ class TestParagraphState:
             questions=[
                 QuestionRecord(
                     question_type="mc", question_text="q1", correct_answer=["A"],
-                    correct_count=1,
+                    correct_count=1, status="generated",
                 ),
                 QuestionRecord(
                     question_type="mc", question_text="q2", correct_answer="B",
-                    correct_count=2,
+                    correct_count=2, status="generated",
                 ),
             ],
         )
@@ -210,11 +231,11 @@ class TestParagraphState:
             questions=[
                 QuestionRecord(
                     question_type="mc", question_text="q1", correct_answer=["A"],
-                    correct_count=1,
+                    correct_count=1, status="generated",
                 ),
                 QuestionRecord(
                     question_type="mc", question_text="q2", correct_answer="B",
-                    correct_count=0,
+                    correct_count=0, status="generated",
                 ),
             ],
         )
@@ -227,19 +248,53 @@ class TestParagraphState:
             questions=[
                 QuestionRecord(
                     question_type="mc", question_text="q1", correct_answer=["A"],
-                    correct_count=3,
+                    correct_count=3, status="generated",
                 ),
                 QuestionRecord(
-                    question_type="mc", question_text="q2", correct_answer="B",
-                    correct_count=1,
+                    question_type="mc", question_text="q2", correct_answer=["B"],
+                    correct_count=1, status="generated",
                 ),
                 QuestionRecord(
-                    question_type="mc", question_text="q3", correct_answer="C",
-                    correct_count=3,
+                    question_type="mc", question_text="q3", correct_answer=["C"],
+                    correct_count=3, status="generated",
                 ),
             ],
         )
         assert para.mastered_count(3) == 2
+
+    def test_skips_non_generated_in_all_answered(self):
+        para = ParagraphState(
+            index=0,
+            unlocked=True,
+            questions=[
+                QuestionRecord(
+                    question_type="mc", question_text="q1", correct_answer=["A"],
+                    correct_count=1, status="generated",
+                ),
+                QuestionRecord(
+                    question_type="mc", question_text="q2", correct_answer=["B"],
+                    correct_count=0, status="pending",
+                ),
+            ],
+        )
+        assert para.all_answered_correctly_at_least_once()
+
+    def test_skips_non_generated_in_mastered_count(self):
+        para = ParagraphState(
+            index=0,
+            unlocked=True,
+            questions=[
+                QuestionRecord(
+                    question_type="mc", question_text="q1", correct_answer=["A"],
+                    correct_count=3, status="generated",
+                ),
+                QuestionRecord(
+                    question_type="mc", question_text="q2", correct_answer=["B"],
+                    correct_count=3, status="pending",
+                ),
+            ],
+        )
+        assert para.mastered_count(3) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +328,7 @@ class TestGameProgress:
         assert pct == 0.0
 
     def test_partial_progress(self, manager: GameManager, sample_state: GameState):
-        # 2 paragraphs × 3 questions × 2 correct_to_master = 12 total possible
+        # 2 paragraphs × 3 generated questions × 2 correct_to_master = 12 total possible
         # Answer 3 correctly → 3/12 = 25%
         sample_state.paragraphs[0].questions[0].correct_count = 2
         sample_state.paragraphs[0].questions[1].correct_count = 1
@@ -295,6 +350,11 @@ class TestGameProgress:
         assert stats["mastered_questions"] == 1
         assert stats["unlocked_paragraphs"] == 1
 
+    def test_stats_skips_pending_questions(self, manager: GameManager, sample_state: GameState):
+        sample_state.paragraphs[0].questions[1].status = "pending"
+        stats = manager.get_stats(sample_state)
+        assert stats["total_questions"] == 5  # one pending excluded
+
 
 class TestGetNextQuestion:
     def test_returns_first_unseen(self, manager: GameManager, sample_state: GameState):
@@ -312,12 +372,23 @@ class TestGetNextQuestion:
         assert manager.get_next_question(sample_state) is None
 
     def test_prioritizes_locked_paragraphs_excluded(self, manager: GameManager, sample_state: GameState):
-        # First para questions mastered, second not unlocked → should return None
-        # (no unlocked paragraphs with non-mastered questions)
         for q in sample_state.paragraphs[0].questions:
             q.correct_count = 2
         result = manager.get_next_question(sample_state)
         assert result is None
+
+    def test_skips_pending_questions(self, manager: GameManager, sample_state: GameState):
+        sample_state.paragraphs[0].questions[0].status = "pending"
+        result = manager.get_next_question(sample_state)
+        assert result is not None
+        pi, qi, q = result
+        assert qi == 1  # skipped the pending Q0
+
+    def test_skips_error_questions(self, manager: GameManager, sample_state: GameState):
+        for q in sample_state.paragraphs[0].questions:
+            q.status = "error"
+        result = manager.get_next_question(sample_state)
+        assert result is None  # no generated questions left
 
 
 class TestHasUnprocessedParagraphs:
@@ -326,53 +397,90 @@ class TestHasUnprocessedParagraphs:
             project_name="test",
             paragraphs=[
                 ParagraphState(index=0, unlocked=True, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"]),
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"], status="generated"),
                 ]),
                 ParagraphState(index=1, unlocked=False, questions=[]),
             ],
         )
         assert manager.has_unprocessed_paragraphs(state) is True
 
-    def test_false_when_all_paragraphs_have_questions(self, manager: GameManager):
+    def test_false_when_all_paragraphs_have_generated_questions(self, manager: GameManager):
         state = GameState(
             project_name="test",
             paragraphs=[
                 ParagraphState(index=0, unlocked=True, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"]),
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"], status="generated"),
                 ]),
                 ParagraphState(index=1, unlocked=False, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q2?", correct_answer=["false"]),
+                    QuestionRecord(question_type="true_false", question_text="Q2?", correct_answer=["false"], status="generated"),
                 ]),
             ],
         )
         assert manager.has_unprocessed_paragraphs(state) is False
 
-    def test_false_when_all_locked_but_with_questions(self, manager: GameManager):
+    def test_false_when_all_locked_but_with_generated_questions(self, manager: GameManager):
         state = GameState(
             project_name="test",
             paragraphs=[
                 ParagraphState(index=0, unlocked=False, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"]),
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"], status="generated"),
                 ]),
                 ParagraphState(index=1, unlocked=False, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q2?", correct_answer=["false"]),
+                    QuestionRecord(question_type="true_false", question_text="Q2?", correct_answer=["false"], status="generated"),
                 ]),
             ],
         )
         assert manager.has_unprocessed_paragraphs(state) is False
+
+    def test_true_when_locked_paragraphs_only_pending(self, manager: GameManager):
+        """A paragraph with only pending questions should be considered unprocessed."""
+        state = GameState(
+            project_name="test",
+            paragraphs=[
+                ParagraphState(index=0, unlocked=True, questions=[
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"], status="pending"),
+                ]),
+                ParagraphState(index=1, unlocked=False, questions=[
+                    QuestionRecord(question_type="true_false", question_text="Q2?", correct_answer=["false"], status="pending"),
+                ]),
+            ],
+        )
+        assert manager.has_unprocessed_paragraphs(state) is True
 
     def test_false_when_all_unlocked_and_answered(self, manager: GameManager):
         state = GameState(
             project_name="test",
             paragraphs=[
                 ParagraphState(index=0, unlocked=True, questions=[
-                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"]),
+                    QuestionRecord(question_type="true_false", question_text="Q?", correct_answer=["true"], status="generated"),
                 ]),
                 ParagraphState(index=1, unlocked=True, questions=[]),
             ],
         )
-        # All unlocked, no locked empty paragraphs → should be False
         assert manager.has_unprocessed_paragraphs(state) is False
+
+
+class TestFindNextPending:
+    def test_returns_first_pending(self, manager: GameManager, sample_state: GameState):
+        sample_state.paragraphs[0].questions[0].status = "pending"
+        result = manager.find_next_pending(sample_state)
+        assert result is not None
+        pi, qi, q = result
+        assert pi == 0
+        assert qi == 0
+
+    def test_returns_none_when_all_generated(self, manager: GameManager, sample_state: GameState):
+        result = manager.find_next_pending(sample_state)
+        assert result is None
+
+    def test_returns_pending_even_with_errors(self, manager: GameManager, sample_state: GameState):
+        for q in sample_state.paragraphs[0].questions:
+            q.status = "error"
+        sample_state.paragraphs[1].questions[0].status = "pending"
+        result = manager.find_next_pending(sample_state)
+        assert result is not None
+        pi, qi, q = result
+        assert pi == 1
 
 
 class TestSubmitAnswer:
@@ -400,51 +508,38 @@ class TestSubmitAnswer:
         assert result["correct"] is True
 
     def test_unlock_next_paragraph(self, manager: GameManager, sample_state: GameState):
-        # Answer all questions in para 0 correctly once → para 1 should unlock
         sample_state.paragraphs[0].questions[0].correct_count = 1
         sample_state.paragraphs[0].questions[1].correct_count = 1
-        # Answer Q3 correctly to trigger unlock check
         result = manager.submit_answer(sample_state, 0, 2, "answer")
         assert result["correct"] is True
         assert sample_state.paragraphs[1].unlocked is True
 
 
-class TestStoreQuestions:
-    def test_store_questions(self, manager: GameManager):
-        manager.init_game("storetest", 2)
-        questions = [
-            {"type": "true_false", "question": "Test?", "correct_answer": ["true"]},
-            {"type": "true_false", "question": "Is it?", "correct_answer": ["true"]},
-        ]
-        manager.store_questions("storetest", 0, questions)
-        state = manager.load_state("storetest")
-        assert state is not None
-        assert len(state.paragraphs[0].questions) == 2
-        assert state.paragraphs[0].questions[0].question_type == "true_false"
-        assert state.paragraphs[0].questions[1].correct_answer == ["true"]
-
-
 class TestResetGame:
     def test_reset_clears_counts(self, manager: GameManager):
         state = manager.init_game("resetme", 2)
-        manager.store_questions("resetme", 0, [
-            {"type": "mc", "question": "Q?", "correct_answer": "A"},
-        ])
-        manager.store_questions("resetme", 1, [
-            {"type": "mc", "question": "Q2?", "correct_answer": "B"},
-        ])
+        # Manually add generated questions
+        for idx in range(2):
+            state.paragraphs[idx].questions = [
+                QuestionRecord(
+                    id=1,
+                    question_type="true_false",
+                    question_text="Q?",
+                    correct_answer=["true"],
+                    status="generated",
+                ),
+            ]
+        manager.save_state("resetme", state)
 
-        # Add some progress
         loaded = manager.load_state("resetme")
         assert loaded is not None
-        manager.submit_answer(loaded, 0, 0, "A")
+        manager.submit_answer(loaded, 0, 0, "True")
         loaded.paragraphs[1].unlocked = True
-        manager.submit_answer(loaded, 1, 0, "B")
+        manager.submit_answer(loaded, 1, 0, "True")
 
-        # Reset
         state2 = manager.reset_game("resetme", 2)
         assert state2.paragraphs[0].unlocked is True
-        assert state2.paragraphs[1].unlocked is False  # locked again
+        assert state2.paragraphs[1].unlocked is False
         assert state2.paragraphs[0].questions[0].correct_count == 0
         assert state2.paragraphs[1].questions[0].correct_count == 0
 

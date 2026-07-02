@@ -33,8 +33,8 @@ _DEFAULT_USER_PROMPT_TPL = (
 )
 
 _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL = (
-    'Based on the following text, Generate a true/false question in language "{language}".\n'
-    'The question must target the keyword "{keyword}".\n'
+    'Based on the following text, Generate a true/false statement in language "{language}".\n'
+    'The statement must target the keyword "{keyword}".\n'
     'The correct answer must be "{target_response}".\n'
     'Do NOT copy phrases from the original text - rephrase the concept in your own words.\n'
     'Text:\n'

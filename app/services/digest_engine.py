@@ -7,8 +7,6 @@ for keyword extraction.
 from __future__ import annotations
 
 import json
-import random
-import re
 import threading
 import time
 from dataclasses import dataclass
@@ -80,17 +78,12 @@ class LazyAIManager:
         self,
         segmenter: Any,
         file_manager: Any,
-        game_manager: Any = None,
-        question_generator: Any = None,
         config_manager: Any = None,
     ) -> None:
         self.segmenter = segmenter
         self.file_manager = file_manager
-        self.game_manager = game_manager
-        self.question_generator = question_generator
         self.config_manager = config_manager
         self._cancel_events: dict[str, threading.Event] = {}
-        self._question_gen_active: set[str] = set()
 
     # ----- paths ----------------------------------------------------------
 
@@ -163,52 +156,6 @@ class LazyAIManager:
             total_words = len(text.split())
             self._persist_state(project_name, total_words=total_words)
         return text
-
-    def ensure_questions_generated(self, project_name: str) -> int:
-        """Generate questions for any processed chunks that are missing them.
-
-        Scans ``digest.json`` for chunks with ``text_keywords`` set, then
-        checks whether the corresponding paragraph in ``game_state.json``
-        already has questions. Generates questions for any that don't.
-
-        Returns the number of paragraphs whose questions were generated.
-
-        This is called at app startup to backfill questions for projects
-        whose digest completed before the question-generation feature
-        was introduced, or after a crash during generation.
-
-        The project is tracked as having an active question-generation
-        job while this runs, so the game controller can return
-        ``{"status": "waiting"}`` instead of premature congratulations.
-        """
-        if self.game_manager is None:
-            return 0
-
-        self._question_gen_active.add(project_name)
-        try:
-            chunks = self._load_chunks(project_name)
-            if not chunks:
-                return 0
-
-            state = self.game_manager.load_state(project_name)
-            generated = 0
-
-            for i, chunk in enumerate(chunks):
-                if chunk.get("text_keywords") is None:
-                    continue
-                if state is not None and i < len(state.paragraphs) and state.paragraphs[i].questions:
-                    continue
-                self._generate_chunk_questions(project_name, chunk["original_text"], i)
-                generated += 1
-
-            if generated:
-                logger.info(
-                    "Generated %d question(s) for %d paragraph(s) of %s",
-                    generated, generated, project_name,
-                )
-            return generated
-        finally:
-            self._question_gen_active.discard(project_name)
 
     def generate_title(self, project_name: str) -> tuple[str, str]:
         """Generate a project title and detect the document language.
@@ -330,158 +277,6 @@ class LazyAIManager:
             return False
         return processed < total
 
-    def _generate_chunk_questions(self, project_name: str, chunk_text: str, chunk_idx: int) -> None:
-        """Generate questions for a chunk — programmatic first, then LLM.
-
-        Two-phase approach:
-          Phase 1 — save programmatic questions (Reading Check + Fill the Gap)
-                     immediately so the user can start playing.
-          Phase 2 — generate LLM questions (true_false) and append them.
-                     Failures are non-fatal — programmatic Qs are already saved.
-        """
-        if self.game_manager is None:
-            return
-
-        from app.models.game_state import QuestionRecord
-
-        state = self.game_manager.load_state(project_name)
-        if state is None:
-            all_chunks = self._load_chunks(project_name)
-            state = self.game_manager.init_game(project_name, len(all_chunks))
-
-        max_id = 0
-        for para in state.paragraphs:
-            for q in para.questions:
-                if q.id > max_id:
-                    max_id = q.id
-
-        questions: list[QuestionRecord] = []
-
-        # ---- Phase 1: programmatic questions --------------------------------
-
-        # 1. Reading Check
-        max_id += 1
-        questions.append(QuestionRecord(
-            id=max_id,
-            title="Reading Check",
-            question_type="options_choice",
-            question_text=chunk_text,
-            options=["Ok, i read it", "not yet"],
-            correct_answer=["Ok, i read it"],
-            correct_to_master=1,
-        ))
-
-        # 2. Fill the Gap — one per keyword
-        all_chunks = self._load_chunks(project_name)
-        current_chunk = all_chunks[chunk_idx] if chunk_idx < len(all_chunks) else {}
-        keywords = current_chunk.get("text_keywords") or []
-
-        if keywords:
-            all_kw_pool: list[str] = []
-            seen: set[str] = set()
-            for ch in all_chunks:
-                for kw in ch.get("text_keywords") or []:
-                    lower = kw.lower()
-                    if lower not in seen:
-                        seen.add(lower)
-                        all_kw_pool.append(kw)
-
-            sentences = [s.strip() for s in re.split(r'(?<=[.!?;])\s+', chunk_text.strip()) if s.strip()]
-            if not sentences:
-                sentences = [chunk_text.strip()]
-
-            for kw in keywords:
-                target_sentence = None
-                for sent in sentences:
-                    if re.search(re.escape(kw), sent, re.IGNORECASE):
-                        target_sentence = sent
-                        break
-                if not target_sentence:
-                    continue
-
-                gap_text = re.sub(re.escape(kw), "________", target_sentence, flags=re.IGNORECASE)
-
-                distractor_pool = [w for w in all_kw_pool if w.lower() != kw.lower()]
-                if len(distractor_pool) >= 3:
-                    distractors = random.sample(distractor_pool, 3)
-                else:
-                    distractors = list(distractor_pool)
-                options = [kw] + distractors
-                random.shuffle(options)
-
-                max_id += 1
-                questions.append(QuestionRecord(
-                    id=max_id,
-                    title="Fill the Gap",
-                    question_type="fill_gap",
-                    question_text=gap_text,
-                    options=options,
-                    correct_answer=[kw],
-                    correct_to_master=0,
-                ))
-
-        # Save programmatic questions immediately — user can play now
-        state.paragraphs[chunk_idx].questions = questions
-        self.game_manager.save_state(project_name, state)
-        logger.debug(
-            "Phase 1 — saved %d programmatic question(s) for chunk %d of %s",
-            len(questions), chunk_idx, project_name,
-        )
-
-        # ---- Phase 2: LLM-generated questions ------------------------------
-
-        if self.question_generator is None or self.config_manager is None:
-            return
-
-        if not keywords:
-            return
-
-        try:
-            cfg = self.config_manager.load()
-            game_cfg = cfg.get("game", {})
-            language = game_cfg.get("language", "es")
-
-            tf_questions = self.question_generator.generate_true_false_questions(
-                chunk_text=chunk_text,
-                keywords=keywords,
-                language=language,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Phase 2 — LLM question generation failed for chunk %d of %s: %s",
-                chunk_idx, project_name, exc,
-            )
-            return
-
-        # Reload state to preserve any user progress made between Phase 1 and now
-        state = self.game_manager.load_state(project_name)
-        if state is None:
-            return
-
-        existing = list(state.paragraphs[chunk_idx].questions)
-        max_id = max((q.id for p in state.paragraphs for q in p.questions), default=0)
-
-        for q_dict in tf_questions:
-            max_id += 1
-            ca = q_dict.get("correct_answer", "")
-            if isinstance(ca, str):
-                ca = [ca] if ca else []
-            existing.append(QuestionRecord(
-                id=max_id,
-                title="True or False",
-                question_type=q_dict["type"],
-                question_text=q_dict["question"],
-                options=q_dict.get("options", []),
-                correct_answer=ca,
-            ))
-
-        state.paragraphs[chunk_idx].questions = existing
-        self.game_manager.save_state(project_name, state)
-        logger.debug(
-            "Phase 2 — appended %d LLM question(s) for chunk %d of %s",
-            len(tf_questions), chunk_idx, project_name,
-        )
-
     def _resolve_page_number(self, word_idx: int, page_ranges: list[tuple[int, int, int]]) -> int:
         """Return the 1-indexed page number containing the given word index."""
         for page_num, start, end in page_ranges:
@@ -579,9 +374,6 @@ class LazyAIManager:
         chunks[processed]["text_keywords"] = keywords if keywords else None
         self._save_chunks(project_name, chunks)
 
-        # Generate questions for this chunk so users can start playing ASAP
-        self._generate_chunk_questions(project_name, chunk_text, processed)
-
         current_keywords = int(state.get("total_keywords", 0)) + (len(keywords) if keywords else 0)
         new_processed = processed + 1
 
@@ -642,9 +434,6 @@ class LazyAIManager:
 
     def is_cancelled(self, project_name: str) -> bool:
         return self._cancel_events.get(project_name, threading.Event()).is_set()
-
-    def is_question_generation_active(self, project_name: str) -> bool:
-        return project_name in self._question_gen_active
 
     def clear_cancel(self, project_name: str) -> None:
         ev = self._cancel_events.get(project_name)

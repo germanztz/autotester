@@ -57,7 +57,10 @@ def _load_digest_state(project_dir: Path) -> dict[str, Any]:
 
 
 def _load_game_state(project_dir: Path) -> dict[str, Any]:
-    """Read ``game_state.json`` and return progress + state info."""
+    """Read ``game_state.json`` and return progress + state info.
+
+    Only questions with ``status == "generated"`` are counted toward progress.
+    """
     state_path = project_dir / "game_state.json"
     if not state_path.exists():
         return dict(_GAME_DEFAULTS)
@@ -66,11 +69,13 @@ def _load_game_state(project_dir: Path) -> dict[str, Any]:
         if not isinstance(data, dict):
             return dict(_GAME_DEFAULTS)
         paragraphs = data.get("paragraphs", [])
-        total_correct = sum(
-            q.get("correct_count", 0) for p in paragraphs for q in p.get("questions", [])
-        )
+        all_questions = [
+            q for p in paragraphs for q in p.get("questions", [])
+            if q.get("status") == "generated"
+        ]
+        total_correct = sum(q.get("correct_count", 0) for q in all_questions)
         total_possible = sum(
-            q.get("correct_to_master") or 3 for p in paragraphs for q in p.get("questions", [])
+            q.get("correct_to_master") or 3 for q in all_questions
         )
         progress_pct = round((total_correct / total_possible) * 100, 1) if total_possible > 0 else 0.0
         unlocked_count = sum(1 for p in paragraphs if p.get("unlocked", False))
@@ -167,10 +172,11 @@ class FileManager:
             all_questions = [
                 q for p in game.get("paragraphs", []) for q in p.get("questions", [])
             ]
-            total_questions = len(all_questions)
-            rc_count = sum(1 for q in all_questions if q.get("question_type") == "options_choice")
-            fg_count = sum(1 for q in all_questions if q.get("question_type") == "fill_gap")
-            tf_count = sum(1 for q in all_questions if q.get("question_type") == "true_false")
+            generated = [q for q in all_questions if q.get("status") == "generated"]
+            total_questions = len(generated)
+            rc_count = sum(1 for q in generated if q.get("question_type") == "info")
+            fg_count = sum(1 for q in generated if q.get("question_type") == "fill")
+            tf_count = sum(1 for q in generated if q.get("question_type") == "true_false")
             entries.append(
                 ProjectEntry(
                     name=path.name,

@@ -73,6 +73,73 @@ def generator(fake_llm, fake_config_manager) -> QuestionGenerator:
     return QuestionGenerator(fake_llm, fake_config_manager)
 
 
+class TestGenerateSingleTrueFalse:
+    def test_returns_single_question(self, generator: QuestionGenerator):
+        result = generator.generate_single_true_false(
+            chunk_text="France is a country in Europe.",
+            keyword="France",
+            language="en",
+        )
+        assert result["type"] == "true_false"
+        assert "question" in result
+        assert result["correct_answer"] in ("true", "false")
+
+    def test_uses_target_response(self, generator: QuestionGenerator):
+        result = generator.generate_single_true_false(
+            chunk_text="Sample text.",
+            keyword="test",
+            language="en",
+            target_response="false",
+        )
+        assert result["correct_answer"] == "false"
+
+    def test_uses_provided_model(self, generator: QuestionGenerator):
+        llm = _FakeLLM()
+        gen = QuestionGenerator(llm, generator.config_manager)
+        gen.generate_single_true_false(
+            chunk_text="Sample text.",
+            keyword="test",
+            language="en",
+            model="custom-model",
+        )
+        assert llm.calls[0][0] == "custom-model"
+
+    def test_raises_on_llm_failure(self, generator: QuestionGenerator):
+        gen = QuestionGenerator(_FakeLLM(fail=True), generator.config_manager)
+        with pytest.raises(RuntimeError, match="True/false question generation failed"):
+            gen.generate_single_true_false(
+                chunk_text="Sample text.",
+                keyword="test",
+                language="en",
+            )
+
+    def test_retries_on_failure(self, generator: QuestionGenerator):
+        llm = _FakeLLM(fail=True)
+        gen = QuestionGenerator(llm, generator.config_manager)
+        with pytest.raises(RuntimeError):
+            gen.generate_single_true_false(
+                chunk_text="Sample text.",
+                keyword="test",
+                language="en",
+            )
+        assert llm.call_count == 3
+
+    def test_formats_prompt_with_all_placeholders(self, generator: QuestionGenerator):
+        llm = _FakeLLM()
+        gen = QuestionGenerator(llm, generator.config_manager)
+        gen.generate_single_true_false(
+            chunk_text="Some text here.",
+            keyword="mykeyword",
+            language="fr",
+            target_response="false",
+        )
+        prompt = llm.calls[0][1]
+        assert "Some text here." in prompt
+        assert "mykeyword" in prompt
+        assert "false" in prompt
+        assert "fr" in prompt
+
+
 class TestGenerateTrueFalse:
     def test_returns_one_question_per_keyword(self, generator: QuestionGenerator):
         gen = QuestionGenerator(_FakeLLM(), generator.config_manager)

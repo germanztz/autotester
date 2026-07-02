@@ -9,21 +9,21 @@ from typing import Any
 class QuestionKind(Enum):
     INFO = "info"
     TRUE_FALSE = "true_false"
-    CHOICE = "choice"
-    MULTI_CHOICE = "multi"
-    ORDER = "order"
-    WRITE = "write"
     FILL = "fill"
+    CHOICE = "choice"
+    # MULTI_CHOICE = "multi"
+    # ORDER = "order"
+    # WRITE = "write"
 
 
 _TITLES: dict[QuestionKind, str] = {
     QuestionKind.INFO: "Read check",
-    QuestionKind.TRUE_FALSE: "True or false",
-    QuestionKind.CHOICE: "Select response",
-    QuestionKind.MULTI_CHOICE: "Select all that apply",
-    QuestionKind.ORDER: "Order correctly",
-    QuestionKind.WRITE: "Write response",
     QuestionKind.FILL: "Fill the blank",
+    QuestionKind.TRUE_FALSE: "True or false",
+    # QuestionKind.CHOICE: "Select response",
+    # QuestionKind.MULTI_CHOICE: "Select all that apply",
+    # QuestionKind.ORDER: "Order correctly",
+    # QuestionKind.WRITE: "Write response",
 }
 
 

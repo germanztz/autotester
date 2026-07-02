@@ -78,8 +78,6 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     lazy_ai_manager = LazyAIManager(
         segmenter=segmenter,
         file_manager=file_manager,
-        game_manager=game_manager,
-        question_generator=question_generator,
         config_manager=config_manager,
     )
     job_runner = JobRunner(
@@ -127,13 +125,18 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
     pending = [e for e in file_manager.list_projects() if lazy_ai_manager.needs_digest(e.name)]
     get_logger().info("Projects pending processing: %d", len(pending))
 
-    # Backfill questions in the background for projects whose digest
-    # completed before the question-generation feature existed, or after
-    # a partial crash.  Runs on the JobRunner so the main thread is not
-    # blocked (LLM calls for true_false etc. can take many seconds).
+    # Start question generation for any project that has a completed digest
+    # but no game_state.json yet.
     for entry in file_manager.list_projects():
-        if entry.digest_state in ("complete", "processing") or lazy_ai_manager.needs_digest(entry.name):
-            job_runner.submit(lazy_ai_manager.ensure_questions_generated, entry.name)
+        if entry.digest_state == "complete" and entry.game_progress == 0.0:
+            game_path = file_manager.project_path(entry.name) / "game_state.json"
+            if not game_path.exists():
+                get_logger().info("Planning questions for %s", entry.name)
+                result = question_engine.start_game(entry.name)
+                if result.get("status") == "generating":
+                    job_runner.submit(
+                        question_engine.generate_all_questions, entry.name
+                    )
 
     @app.context_processor
     def inject_globals() -> dict:

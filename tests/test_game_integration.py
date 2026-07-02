@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
+from app.models.game_state import QuestionRecord
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -78,6 +80,32 @@ def _upload_and_digest(client, project_name: str, project_bytes: bytes | None = 
     return project_name
 
 
+def _init_with_generated_questions(client, proj_name: str, num_chunks: int, questions_per_chunk: list[list[dict]]):
+    """Helper to init game state with generated questions bypassing the LLM."""
+    from flask import current_app
+    with client.application.app_context():
+        mgr = current_app.extensions["game_manager"]
+        mgr.init_game(proj_name, num_chunks)
+        state = mgr.load_state(proj_name)
+        assert state is not None
+        for idx, qlist in enumerate(questions_per_chunk):
+            qid = 0
+            records = []
+            for q in qlist:
+                qid += 1
+                records.append(QuestionRecord(
+                    id=qid,
+                    title="True or False",
+                    question_type="true_false",
+                    question_text=q["question"],
+                    options=["True", "False"],
+                    correct_answer=[q["correct_answer"]],
+                    status="generated",
+                ))
+            state.paragraphs[idx].questions = records
+        mgr.save_state(proj_name, state)
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -93,18 +121,11 @@ class TestGameIntegration:
         proj_name = _upload_and_digest(client, "e2e_start")
         _ensure_chunks(temp_workspace["projects"], proj_name, 2)
 
-        # Init game directly (bypass /start to avoid background job race).
-        from flask import current_app
-        with client.application.app_context():
-            mgr = current_app.extensions["game_manager"]
-            mgr.init_game(proj_name, 2)
-            mgr.store_questions(proj_name, 0, [
-                {"type": "true_false", "question": "Q1?", "correct_answer": "true"},
-                {"type": "true_false", "question": "Q2?", "correct_answer": "false"},
-            ])
-            mgr.store_questions(proj_name, 1, [
-                {"type": "true_false", "question": "Q3?", "correct_answer": "true"},
-            ])
+        _init_with_generated_questions(client, proj_name, 2, [
+            [{"question": "Q1?", "correct_answer": "true"},
+             {"question": "Q2?", "correct_answer": "false"}],
+            [{"question": "Q3?", "correct_answer": "true"}],
+        ])
 
         status_resp = client.get(f"/game/{proj_name}/status")
         status_data = status_resp.get_json()
@@ -117,14 +138,10 @@ class TestGameIntegration:
         proj_name = _upload_and_digest(client, "e2e_correct")
         _ensure_chunks(temp_workspace["projects"], proj_name, 1)
 
-        from flask import current_app
-        with client.application.app_context():
-            mgr = current_app.extensions["game_manager"]
-            mgr.init_game(proj_name, 1)
-            mgr.store_questions(proj_name, 0, [
-                {"type": "true_false", "question": "Q1?", "correct_answer": "true"},
-                {"type": "true_false", "question": "Q2?", "correct_answer": "false"},
-            ])
+        _init_with_generated_questions(client, proj_name, 1, [
+            [{"question": "Q1?", "correct_answer": "true"},
+             {"question": "Q2?", "correct_answer": "false"}],
+        ])
 
         next_resp = client.get(f"/game/{proj_name}/next")
         assert next_resp.status_code == 200
@@ -133,15 +150,7 @@ class TestGameIntegration:
         before_resp = client.get(f"/game/{proj_name}/status")
         before_pct = before_resp.get_json()["progress_pct"]
 
-        from flask import current_app
-        with client.application.app_context():
-            mgr = current_app.extensions["game_manager"]
-            state = mgr.load_state(proj_name)
-            if state is not None:
-                q = state.paragraphs[q_data["para_idx"]].questions[q_data["q_idx"]]
-                correct = q.correct_answer[0]
-            else:
-                correct = "true"
+        correct = q_data.get("options", [])[0] if q_data.get("options") else "true"
 
         answer_resp = client.post(
             f"/game/{proj_name}/answer",
@@ -164,13 +173,9 @@ class TestGameIntegration:
         proj_name = _upload_and_digest(client, "e2e_wrong")
         _ensure_chunks(temp_workspace["projects"], proj_name, 1)
 
-        from flask import current_app
-        with client.application.app_context():
-            mgr = current_app.extensions["game_manager"]
-            mgr.init_game(proj_name, 1)
-            mgr.store_questions(proj_name, 0, [
-                {"type": "true_false", "question": "Q1?", "correct_answer": "true"},
-            ])
+        _init_with_generated_questions(client, proj_name, 1, [
+            [{"question": "Q1?", "correct_answer": "true"}],
+        ])
 
         next_resp = client.get(f"/game/{proj_name}/next")
         q_data = next_resp.get_json()
@@ -198,38 +203,33 @@ class TestGameIntegration:
         proj_name = _upload_and_digest(client, "e2e_unlock")
         _ensure_chunks(temp_workspace["projects"], proj_name, 2)
 
-        # Init game state directly (bypass start API so no background job).
+        _init_with_generated_questions(client, proj_name, 2, [
+            [{"question": "Q1?", "correct_answer": "true"},
+             {"question": "Q2?", "correct_answer": "true"}],
+            [{"question": "Q3?", "correct_answer": "false"}],
+        ])
+
         from flask import current_app
         with client.application.app_context():
             mgr = current_app.extensions["game_manager"]
-            mgr.init_game(proj_name, 2)
-            mgr.store_questions(proj_name, 0, [
-                {"type": "true_false", "question": "Q1?", "correct_answer": "true"},
-                {"type": "true_false", "question": "Q2?", "correct_answer": "true"},
-            ])
-            mgr.store_questions(proj_name, 1, [
-                {"type": "true_false", "question": "Q3?", "correct_answer": "false"},
-            ])
-
             state = mgr.load_state(proj_name)
         assert state is not None
         assert state.paragraphs[0].unlocked is True
         assert state.paragraphs[1].unlocked is False
 
-        # Set all para 0 questions as answered correctly at least once.
-        with client.application.app_context():
-            state = mgr.load_state(proj_name)
         for q in state.paragraphs[0].questions:
             q.correct_count = 1
             q.last_seen = 1.0
         with client.application.app_context():
+            mgr = current_app.extensions["game_manager"]
             mgr.save_state(proj_name, state)
 
-        # Submit one answer via API to trigger unlock check in submit_answer.
         next_resp = client.get(f"/game/{proj_name}/next")
         n_data = next_resp.get_json()
         pi, qi = n_data["para_idx"], n_data["q_idx"]
+
         with client.application.app_context():
+            mgr = current_app.extensions["game_manager"]
             state = mgr.load_state(proj_name)
         correct = state.paragraphs[pi].questions[qi].correct_answer[0]
         client.post(
@@ -250,27 +250,14 @@ class TestGameIntegration:
         proj_name = _upload_and_digest(client, "e2e_reset")
         _ensure_chunks(temp_workspace["projects"], proj_name, 1)
 
-        # Init game directly (bypass /start to avoid background job race).
-        from flask import current_app
-        with client.application.app_context():
-            mgr = current_app.extensions["game_manager"]
-            mgr.init_game(proj_name, 1)
-            mgr.store_questions(proj_name, 0, [
-                {"type": "true_false", "question": "Q1?", "correct_answer": "true"},
-            ])
+        _init_with_generated_questions(client, proj_name, 1, [
+            [{"question": "Q1?", "correct_answer": "true"}],
+        ])
 
-        # Answer one question correctly.
         next_resp = client.get(f"/game/{proj_name}/next")
         q_data = next_resp.get_json()
-        from flask import current_app
-        with client.application.app_context():
-            mgr = current_app.extensions["game_manager"]
-            state = mgr.load_state(proj_name)
-            if state is not None:
-                q = state.paragraphs[q_data["para_idx"]].questions[q_data["q_idx"]]
-                correct = q.correct_answer[0]
-            else:
-                correct = "true"
+
+        correct = q_data.get("options", [])[0] if q_data.get("options") else "true"
         client.post(
             f"/game/{proj_name}/answer",
             data=json.dumps({
@@ -287,7 +274,7 @@ class TestGameIntegration:
         assert reset_data["progress_pct"] == 0.0
         assert reset_data["status"] == "reset"
 
-        # Verify in the model too.
+        from flask import current_app
         mgr = current_app.extensions["game_manager"]
         with client.application.app_context():
             state = mgr.load_state(proj_name)
