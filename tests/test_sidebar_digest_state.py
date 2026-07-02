@@ -180,6 +180,41 @@ class TestListProjectsWithDigestState:
         assert e.digest_fill_gap == 2
         assert e.digest_true_false == 3
 
+    def test_per_type_error_counts(self, temp_workspace):
+        fm = FileManager(temp_workspace["projects"])
+        proj = temp_workspace["projects"] / "errors"
+        proj.mkdir()
+        (proj / "x.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
+        _write_state(proj, state="complete")
+        game_state = {
+            "project_name": "errors",
+            "paragraphs": [
+                {
+                    "index": 0,
+                    "unlocked": True,
+                    "questions": [
+                        {"question_type": "info", "question_text": "rc1", "correct_answer": "a", "status": "generated", "wrong_count": 2},
+                        {"question_type": "fill", "question_text": "fg1", "correct_answer": "b", "status": "generated", "wrong_count": 5},
+                        {"question_type": "fill", "question_text": "fg2", "correct_answer": "c", "status": "generated", "wrong_count": 1},
+                        {"question_type": "true_false", "question_text": "tf1", "correct_answer": "true", "status": "generated", "wrong_count": 3},
+                    ],
+                },
+            ],
+            "updated_at": 1000.0,
+        }
+        (proj / "game_state.json").write_text(json.dumps(game_state), encoding="utf-8")
+        entries = fm.list_projects()
+        e = entries[0]
+        assert e.digest_rc_errors == 2
+        assert e.digest_fg_errors == 6
+        assert e.digest_tf_errors == 3
+        assert e.digest_total_errors == 11
+        d = e.to_dict()
+        assert d["digest_rc_errors"] == 2
+        assert d["digest_fg_errors"] == 6
+        assert d["digest_tf_errors"] == 3
+        assert d["digest_total_errors"] == 11
+
     def test_game_progress_from_dict_includes_field(self, temp_workspace):
         fm = FileManager(temp_workspace["projects"])
         proj = temp_workspace["projects"] / "gamedict"

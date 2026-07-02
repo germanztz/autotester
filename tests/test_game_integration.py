@@ -150,7 +150,11 @@ class TestGameIntegration:
         before_resp = client.get(f"/game/{proj_name}/status")
         before_pct = before_resp.get_json()["progress_pct"]
 
-        correct = q_data.get("options", [])[0] if q_data.get("options") else "true"
+        from flask import current_app
+        with client.application.app_context():
+            mgr = current_app.extensions["game_manager"]
+            state = mgr.load_state(proj_name)
+        correct = state.paragraphs[q_data["para_idx"]].questions[q_data["q_idx"]].correct_answer[0]
 
         answer_resp = client.post(
             f"/game/{proj_name}/answer",
@@ -257,7 +261,11 @@ class TestGameIntegration:
         next_resp = client.get(f"/game/{proj_name}/next")
         q_data = next_resp.get_json()
 
-        correct = q_data.get("options", [])[0] if q_data.get("options") else "true"
+        from flask import current_app
+        with client.application.app_context():
+            mgr = current_app.extensions["game_manager"]
+            state = mgr.load_state(proj_name)
+        correct = state.paragraphs[q_data["para_idx"]].questions[q_data["q_idx"]].correct_answer[0]
         client.post(
             f"/game/{proj_name}/answer",
             data=json.dumps({

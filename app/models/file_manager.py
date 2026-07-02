@@ -60,6 +60,7 @@ def _load_game_state(project_dir: Path) -> dict[str, Any]:
     """Read ``game_state.json`` and return progress + state info.
 
     Only questions with ``status == "generated"`` are counted toward progress.
+    Error counts reflect ``wrong_count`` per question type.
     """
     state_path = project_dir / "game_state.json"
     if not state_path.exists():
@@ -79,9 +80,26 @@ def _load_game_state(project_dir: Path) -> dict[str, Any]:
         )
         progress_pct = round((total_correct / total_possible) * 100, 1) if total_possible > 0 else 0.0
         unlocked_count = sum(1 for p in paragraphs if p.get("unlocked", False))
+        rc_errors = sum(
+            q.get("wrong_count", 0) for q in all_questions
+            if q.get("question_type") == "info"
+        )
+        fg_errors = sum(
+            q.get("wrong_count", 0) for q in all_questions
+            if q.get("question_type") == "fill"
+        )
+        tf_errors = sum(
+            q.get("wrong_count", 0) for q in all_questions
+            if q.get("question_type") == "true_false"
+        )
+        total_errors = rc_errors + fg_errors + tf_errors
         return {
             "progress_pct": min(100.0, progress_pct),
             "paragraphs": paragraphs,
+            "rc_errors": rc_errors,
+            "fg_errors": fg_errors,
+            "tf_errors": tf_errors,
+            "total_errors": total_errors,
         }
     except (json.JSONDecodeError, OSError):
         return dict(_GAME_DEFAULTS)
@@ -104,6 +122,10 @@ class ProjectEntry:
     digest_reading_check: int = 0
     digest_fill_gap: int = 0
     digest_true_false: int = 0
+    digest_rc_errors: int = 0
+    digest_fg_errors: int = 0
+    digest_tf_errors: int = 0
+    digest_total_errors: int = 0
     digest_title: str = ""
     digest_language: str = ""
     digest_error: str | None = None
@@ -125,6 +147,10 @@ class ProjectEntry:
             "digest_reading_check": self.digest_reading_check,
             "digest_fill_gap": self.digest_fill_gap,
             "digest_true_false": self.digest_true_false,
+            "digest_rc_errors": self.digest_rc_errors,
+            "digest_fg_errors": self.digest_fg_errors,
+            "digest_tf_errors": self.digest_tf_errors,
+            "digest_total_errors": self.digest_total_errors,
             "digest_title": self.digest_title,
             "digest_language": self.digest_language,
             "digest_error": self.digest_error,
@@ -192,6 +218,10 @@ class FileManager:
                     digest_reading_check=rc_count,
                     digest_fill_gap=fg_count,
                     digest_true_false=tf_count,
+                    digest_rc_errors=game.get("rc_errors", 0),
+                    digest_fg_errors=game.get("fg_errors", 0),
+                    digest_tf_errors=game.get("tf_errors", 0),
+                    digest_total_errors=game.get("total_errors", 0),
                     digest_title=digest.get("title", ""),
                     digest_language=digest.get("language", ""),
                     digest_error=digest["error"],

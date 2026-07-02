@@ -303,6 +303,7 @@
     function startGame(projectName) {
         hideInput();
         apiCall("POST", "/game/" + encodeURIComponent(projectName) + "/start", null, function (data) {
+            if (window.refreshSidebar) window.refreshSidebar();
             showTyping();
             if (data.status === "ready") {
                 loadNextQuestion(projectName);
@@ -372,6 +373,7 @@
             _resetUI();
 
             apiCall("GET", "/game/" + encodeURIComponent(projectName) + "/status", null, function (data) {
+                if (window.refreshSidebar) window.refreshSidebar();
                 if (data.status === "not_started") {
                     renderStartView(projectName, displayName);
                 } else if (data.status === "generating") {

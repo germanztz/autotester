@@ -215,7 +215,8 @@ class TestStartGame:
     def test_start_new_game(self, engine: QuestionEngine, fake_file_manager):
         _write_chunks(fake_file_manager.root, "newproj", 3)
         result = engine.start_game("newproj")
-        assert result["status"] in ("generating", "ready")
+        # After planning, INFO and FILL are already generated — return ready
+        assert result["status"] == "ready"
         assert result["total_paragraphs"] == 3
 
     def test_start_existing_game_returns_ready(self, engine: QuestionEngine, fake_file_manager):
@@ -235,11 +236,13 @@ class TestGetGameStatus:
         status = engine.get_game_status("nostart")
         assert status["status"] == "not_started"
 
-    def test_generating(self, engine: QuestionEngine, fake_file_manager):
+    def test_playing_with_pending(self, engine: QuestionEngine, fake_file_manager):
         _write_chunks(fake_file_manager.root, "gentest", 1)
         engine.plan_questions("gentest")
         status = engine.get_game_status("gentest")
-        assert status["status"] == "generating"
+        # INFO and FILL are generated, so we can play even with pending TRUE_FALSE
+        assert status["status"] == "playing"
+        assert "pending" in status
 
     def test_playing(self, engine: QuestionEngine, fake_file_manager):
         _write_chunks(fake_file_manager.root, "playtest", 1)

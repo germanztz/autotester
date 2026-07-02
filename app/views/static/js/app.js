@@ -44,6 +44,7 @@
             const rc = button.getAttribute("data-digest-total-rc") || "0";
             const fg = button.getAttribute("data-digest-total-fillgap") || "0";
             const tf = button.getAttribute("data-digest-total-tf") || "0";
+            const totalErrors = button.getAttribute("data-digest-total-errors") || "0";
             const titleInput = modal.querySelector("#renameInput");
             const languageInput = modal.querySelector("#languageInput");
             const form = modal.querySelector("#renameForm");
@@ -56,6 +57,7 @@
             const infoRC = modal.querySelector("#infoReadingCheck");
             const infoFG = modal.querySelector("#infoFillGap");
             const infoTF = modal.querySelector("#infoTrueFalse");
+            const infoErrors = modal.querySelector("#infoErrors");
             if (titleInput) titleInput.value = title;
             if (languageInput) languageInput.value = language;
             if (form) form.action = "/files/" + encodeURIComponent(project) + "/rename";
@@ -68,6 +70,7 @@
             if (infoRC) infoRC.textContent = rc;
             if (infoFG) infoFG.textContent = fg;
             if (infoTF) infoTF.textContent = tf;
+            if (infoErrors) infoErrors.textContent = totalErrors;
         });
     }
 

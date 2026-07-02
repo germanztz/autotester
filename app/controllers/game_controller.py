@@ -27,7 +27,7 @@ def start(project_name: str):
         result = engine.start_game(project_name)
         if result.get("status") == "error":
             return jsonify({"error": result.get("error", "Unknown error")}), 404
-        if result.get("status") == "generating":
+        if result.get("pending", 0) > 0:
             job_runner = current_app.extensions.get("job_runner")
             if job_runner:
                 job_runner.submit(engine.generate_all_questions, project_name)
