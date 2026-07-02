@@ -140,12 +140,14 @@ def create_app(config_object: type[Config] | None = None) -> Flask:
 
     @app.context_processor
     def inject_globals() -> dict:
-        """Make managers and theme available to all templates."""
+        """Make managers, theme, and default prompts available to all templates."""
+        from app.models.config_manager import _PROMPT_DEFAULTS
         cfg = config_manager.load()
         return {
             "app_config": cfg,
             "current_theme": cfg.get("theme", "system"),
             "projects": file_manager.list_projects(),
+            "_PROMPT_DEFAULTS": _PROMPT_DEFAULTS,
         }
 
     from app.controllers.main_controller import main_bp

@@ -90,8 +90,8 @@
                     <i class="bi bi-chevron-right small me-1"></i> System prompt
                 </label>
                 <div id="collapseSystemPrompt" class="collapse">
-                    <textarea class="form-control font-monospace" id="system_prompt" name="system_prompt" rows="10">{{ app_config.ia.system_prompt }}</textarea>
-                    <div class="form-text">Sets the persona and behaviour for all LLM calls.</div>
+                    <textarea class="form-control font-monospace" id="system_prompt" name="system_prompt" rows="10" placeholder="{{ _PROMPT_DEFAULTS.system_prompt }}">{% if app_config.ia.system_prompt != _PROMPT_DEFAULTS.system_prompt %}{{ app_config.ia.system_prompt }}{% endif %}</textarea>
+                    <div class="form-text">Sets the persona and behaviour for all LLM calls. Leave empty to use the default prompt.</div>
                 </div>
             </div>
             <div class="mb-3">
@@ -99,10 +99,11 @@
                     <i class="bi bi-chevron-right small me-1"></i> Keyword extraction prompt
                 </label>
                 <div id="collapseKeywordPrompt" class="collapse">
-                    <textarea class="form-control font-monospace" id="user_prompt_tpl" name="user_prompt_tpl" rows="10">{{ app_config.ia.user_prompt_tpl }}</textarea>
+                    <textarea class="form-control font-monospace" id="user_prompt_tpl" name="user_prompt_tpl" rows="10" placeholder="{{ _PROMPT_DEFAULTS.user_prompt_tpl }}">{% if app_config.ia.user_prompt_tpl != _PROMPT_DEFAULTS.user_prompt_tpl %}{{ app_config.ia.user_prompt_tpl }}{% endif %}</textarea>
                     <div class="form-text">
                         Sent once per text chunk to extract keywords. Use <code>{text}</code> as a
                         placeholder for the chunk content. Use <code>&#123;&#123; &#125;&#125;</code> for literal JSON braces.
+                        Leave empty to use the default prompt.
                     </div>
                 </div>
             </div>
@@ -111,10 +112,10 @@
                     <i class="bi bi-chevron-right small me-1"></i> Title extraction prompt
                 </label>
                 <div id="collapseTitlePrompt" class="collapse">
-                    <textarea class="form-control font-monospace" id="title_user_prompt_tpl" name="title_user_prompt_tpl" rows="10">{{ app_config.ia.title_user_prompt_tpl }}</textarea>
+                    <textarea class="form-control font-monospace" id="title_user_prompt_tpl" name="title_user_prompt_tpl" rows="10" placeholder="{{ _PROMPT_DEFAULTS.title_user_prompt_tpl }}">{% if app_config.ia.title_user_prompt_tpl != _PROMPT_DEFAULTS.title_user_prompt_tpl %}{{ app_config.ia.title_user_prompt_tpl }}{% endif %}</textarea>
                     <div class="form-text">
                         Sent once per project with the first 100 words of the PDF text. Use <code>{text}</code>
-                        as a placeholder.
+                        as a placeholder. Leave empty to use the default prompt.
                     </div>
                 </div>
             </div>
@@ -123,11 +124,11 @@
                     <i class="bi bi-chevron-right small me-1"></i> True/False question prompt
                 </label>
                 <div id="collapseTFPrompt" class="collapse">
-                    <textarea class="form-control font-monospace" id="question_true_false_user_prompt_tpl" name="question_true_false_user_prompt_tpl" rows="10">{{ app_config.ia.question_true_false_user_prompt_tpl }}</textarea>
+                    <textarea class="form-control font-monospace" id="question_true_false_user_prompt_tpl" name="question_true_false_user_prompt_tpl" rows="10" placeholder="{{ _PROMPT_DEFAULTS.question_true_false_user_prompt_tpl }}">{% if app_config.ia.question_true_false_user_prompt_tpl != _PROMPT_DEFAULTS.question_true_false_user_prompt_tpl %}{{ app_config.ia.question_true_false_user_prompt_tpl }}{% endif %}</textarea>
                     <div class="form-text">
                         Sent once per keyword to generate a True/False question. Use <code>{text}</code>,
                         <code>{keyword}</code>, <code>{target_response}</code>, and <code>{language}</code>
-                        as placeholders.
+                        as placeholders. Leave empty to use the default prompt.
                     </div>
                 </div>
             </div>

@@ -53,15 +53,29 @@ _DEFAULT_TITLE_USER_PROMPT_TPL = (
     '{{"title": "short descriptive title with emojis", "language": "ISO 639-1 code (e.g., en, es, fr, de, pt, it)"}}'
 )
 
+_PROMPT_KEYS = [
+    "system_prompt",
+    "user_prompt_tpl",
+    "title_user_prompt_tpl",
+    "question_true_false_user_prompt_tpl",
+]
+
+_PROMPT_DEFAULTS: dict[str, str] = {
+    "system_prompt": _DEFAULT_SYSTEM_PROMPT,
+    "user_prompt_tpl": _DEFAULT_USER_PROMPT_TPL,
+    "title_user_prompt_tpl": _DEFAULT_TITLE_USER_PROMPT_TPL,
+    "question_true_false_user_prompt_tpl": _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL,
+}
+
 IA_DEFAULTS: dict[str, Any] = {
     "ollama_url": "http://localhost:11434",
     "ollama_model": "qwen3.5:latest",
     "chunk_size": 100,
     "chunk_overlap": 10,
-    "system_prompt": _DEFAULT_SYSTEM_PROMPT,
-    "user_prompt_tpl": _DEFAULT_USER_PROMPT_TPL,
-    "title_user_prompt_tpl": _DEFAULT_TITLE_USER_PROMPT_TPL,
-    "question_true_false_user_prompt_tpl": _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL,
+    "system_prompt": None,
+    "user_prompt_tpl": None,
+    "title_user_prompt_tpl": None,
+    "question_true_false_user_prompt_tpl": None,
 }
 
 LOGGING_DEFAULTS: dict[str, Any] = {
@@ -89,7 +103,10 @@ _VALID_GAME_KEYS = set(GAME_DEFAULTS.keys())
 
 
 def _validate_ia(ia: dict[str, Any]) -> None:
-    """Raise ValueError if the IA section is invalid."""
+    """Raise ValueError if the IA section is invalid.
+
+    ``None`` prompt values are accepted — they mean "use the default".
+    """
     unknown = set(ia) - _VALID_IA_KEYS
     if unknown:
         raise ValueError(f"Unknown IA keys: {sorted(unknown)}")
@@ -99,25 +116,18 @@ def _validate_ia(ia: dict[str, Any]) -> None:
         raise ValueError("chunk_size must be a positive integer")
     if not isinstance(chunk_overlap, int) or chunk_overlap < 0 or chunk_overlap >= chunk_size:
         raise ValueError("chunk_overlap must be 0 <= overlap < chunk_size")
-    system_prompt = ia.get("system_prompt", "")
-    if not isinstance(system_prompt, str) or not system_prompt.strip():
-        raise ValueError("system_prompt must be a non-empty string")
-    user_prompt_tpl = ia.get("user_prompt_tpl", "")
-    if not isinstance(user_prompt_tpl, str) or not user_prompt_tpl.strip():
-        raise ValueError("user_prompt_tpl must be a non-empty string")
-    if "{text}" not in user_prompt_tpl:
-        raise ValueError("user_prompt_tpl must contain the {text} placeholder")
-    title_user_prompt_tpl = ia.get("title_user_prompt_tpl", "")
-    if not isinstance(title_user_prompt_tpl, str) or not title_user_prompt_tpl.strip():
-        raise ValueError("title_user_prompt_tpl must be a non-empty string")
-    if "{text}" not in title_user_prompt_tpl:
-        raise ValueError("title_user_prompt_tpl must contain the {text} placeholder")
-    tf_user_prompt = ia.get("question_true_false_user_prompt_tpl", "")
-    if not isinstance(tf_user_prompt, str) or not tf_user_prompt.strip():
-        raise ValueError("question_true_false_user_prompt_tpl must be a non-empty string")
-    for ph in ("{text}", "{keyword}", "{target_response}", "{language}"):
-        if ph not in tf_user_prompt:
-            raise ValueError(f"question_true_false_user_prompt_tpl must contain the {ph} placeholder")
+    for key in _PROMPT_KEYS:
+        value = ia.get(key)
+        if value is None:
+            continue  # None means "use default", valid
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{key} must be a non-empty string")
+        if key in ("user_prompt_tpl", "title_user_prompt_tpl") and "{text}" not in value:
+            raise ValueError(f"{key} must contain the {{text}} placeholder")
+        if key == "question_true_false_user_prompt_tpl":
+            for ph in ("{text}", "{keyword}", "{target_response}", "{language}"):
+                if ph not in value:
+                    raise ValueError(f"{key} must contain the {ph} placeholder")
 
 
 def _validate_game(game_cfg: dict[str, Any]) -> None:
@@ -180,6 +190,10 @@ class ConfigManager:
             ia = {}
         ia_merged = deepcopy(IA_DEFAULTS)
         ia_merged.update({k: v for k, v in ia.items() if k in _VALID_IA_KEYS})
+        # Resolve None prompts to their Python-level defaults.
+        for key in _PROMPT_KEYS:
+            if ia_merged.get(key) is None:
+                ia_merged[key] = _PROMPT_DEFAULTS[key]
         # Coerce numeric fields to int if they came in as strings.
         ia_merged["chunk_size"] = int(ia_merged["chunk_size"])
         ia_merged["chunk_overlap"] = int(ia_merged["chunk_overlap"])
@@ -216,10 +230,20 @@ class ConfigManager:
         return merged
 
     def save(self, config: dict[str, Any]) -> None:
-        """Persist the given configuration atomically to YAML."""
+        """Persist the given configuration atomically to YAML.
+
+        Prompt values that match the Python-level defaults are stored as
+        ``None`` in the YAML so they are not duplicated on disk.
+        """
+        to_write = deepcopy(config)
+        ia = to_write.get("ia")
+        if isinstance(ia, dict):
+            for key in _PROMPT_KEYS:
+                if key in ia and ia[key] == _PROMPT_DEFAULTS.get(key):
+                    ia[key] = None
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.config_path.with_suffix(self.config_path.suffix + ".tmp")
-        tmp.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+        tmp.write_text(yaml.safe_dump(to_write, sort_keys=False), encoding="utf-8")
         tmp.replace(self.config_path)
 
     def update(self, **kwargs: Any) -> dict[str, Any]:
@@ -240,10 +264,17 @@ class ConfigManager:
         """Update IA settings and persist. Validates before saving.
 
         Unknown keys raise ``ValueError``. ``chunk_size`` and ``chunk_overlap``
-        must satisfy ``0 <= overlap < size``.
+        must satisfy ``0 <= overlap < size``. Empty or whitespace-only prompt
+        values are stored as ``None`` (use default).
         """
         current = self.load()
         ia = deepcopy(current.get("ia") or {})
+        # Treat empty prompt values as None (use default).
+        for key in _PROMPT_KEYS:
+            if key in kwargs:
+                value = kwargs[key]
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    kwargs[key] = None
         ia.update(kwargs)
         _validate_ia(ia)
         current["ia"] = ia

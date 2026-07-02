@@ -25,7 +25,11 @@ class TestConfigManagerLoad:
         cfg_path = tmp_path / "config.yaml"
         mgr = ConfigManager(cfg_path)
         cfg = mgr.load()
-        assert cfg == DEFAULT_CONFIG
+        assert cfg["theme"] == DEFAULT_CONFIG["theme"]
+        assert cfg["ia"]["ollama_url"] == DEFAULT_CONFIG["ia"]["ollama_url"]
+        # Prompts are resolved from None → defaults during load
+        for key in ("system_prompt", "user_prompt_tpl", "title_user_prompt_tpl", "question_true_false_user_prompt_tpl"):
+            assert cfg["ia"][key] is not None
         assert cfg_path.exists()
 
     def test_creates_default_when_empty(self, tmp_path: Path):
@@ -122,9 +126,10 @@ class TestLoggingSection:
 
 
 class TestIAQuestionTrueFalsePrompt:
-    def test_default_contains_true_false_prompt(self):
-        assert "question_true_false_user_prompt_tpl" in IA_DEFAULTS
-        tpl = IA_DEFAULTS["question_true_false_user_prompt_tpl"]
+    def test_prompt_defaults_contain_true_false_prompt(self):
+        from app.models.config_manager import _PROMPT_DEFAULTS
+        assert "question_true_false_user_prompt_tpl" in _PROMPT_DEFAULTS
+        tpl = _PROMPT_DEFAULTS["question_true_false_user_prompt_tpl"]
         assert "{text}" in tpl
         assert "{keyword}" in tpl
         assert "{target_response}" in tpl
@@ -188,6 +193,75 @@ class TestIAQuestionTrueFalsePrompt:
             "log_level": "INFO",
         }, follow_redirects=True)
         assert resp.status_code == 200
+
+    def test_validate_ia_accepts_none_prompt(self):
+        """None prompt values are valid (means 'use default')."""
+        _validate_ia({
+            "ollama_url": "http://dummy-server",
+            "ollama_model": "dummy-model",
+            "chunk_size": 100,
+            "chunk_overlap": 10,
+            "system_prompt": None,
+            "user_prompt_tpl": None,
+            "title_user_prompt_tpl": None,
+            "question_true_false_user_prompt_tpl": None,
+        })
+
+    def test_load_resolves_null_prompts(self, tmp_path):
+        """None prompts in YAML are resolved to Python defaults by load()."""
+        from app.models.config_manager import _PROMPT_DEFAULTS
+        cfg_path = tmp_path / "config.yaml"
+        cfg_path.write_text(yaml.safe_dump({
+            "theme": "system",
+            "app_name": "autotester",
+            "ia": {
+                "ollama_url": "http://localhost:11434",
+                "ollama_model": "qwen3.5:latest",
+                "chunk_size": 100,
+                "chunk_overlap": 10,
+                "system_prompt": None,
+                "user_prompt_tpl": None,
+                "title_user_prompt_tpl": None,
+                "question_true_false_user_prompt_tpl": None,
+            },
+        }))
+        mgr = ConfigManager(cfg_path)
+        cfg = mgr.load()
+        for key in _PROMPT_DEFAULTS:
+            assert cfg["ia"][key] == _PROMPT_DEFAULTS[key], f"{key} not resolved"
+
+    def test_save_strips_default_prompts(self, tmp_path):
+        """Default prompts are written as None in YAML."""
+        from app.models.config_manager import _PROMPT_DEFAULTS
+        cfg_path = tmp_path / "config.yaml"
+        mgr = ConfigManager(cfg_path)
+        # Load (auto-creates config with None prompts)
+        mgr.load()
+        raw = yaml.safe_load(cfg_path.read_text())
+        for key in _PROMPT_DEFAULTS:
+            assert raw["ia"].get(key) is None, f"{key} should be None in YAML"
+
+    def test_save_custom_prompt_persisted(self, tmp_path):
+        """Custom prompts are stored as strings, not None."""
+        cfg_path = tmp_path / "config.yaml"
+        mgr = ConfigManager(cfg_path)
+        mgr.update_ia(system_prompt="Custom system prompt")
+        raw = yaml.safe_load(cfg_path.read_text())
+        assert raw["ia"]["system_prompt"] == "Custom system prompt"
+
+    def test_update_ia_empty_prompt_stores_none(self, tmp_path):
+        """Empty prompt values are stored as None in YAML."""
+        from app.models.config_manager import _PROMPT_DEFAULTS
+        cfg_path = tmp_path / "config.yaml"
+        mgr = ConfigManager(cfg_path)
+        mgr.load()
+        # Submit empty prompt (simulates clearing the textarea)
+        mgr.update_ia(system_prompt="   ")
+        raw = yaml.safe_load(cfg_path.read_text())
+        assert raw["ia"]["system_prompt"] is None
+        # load() should still return the resolved default
+        cfg = mgr.load()
+        assert cfg["ia"]["system_prompt"] == _PROMPT_DEFAULTS["system_prompt"]
 
 
 class TestConfigManagerReset:
