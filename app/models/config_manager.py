@@ -33,10 +33,13 @@ _DEFAULT_USER_PROMPT_TPL = (
 )
 
 _DEFAULT_QUESTION_TRUE_FALSE_USER_PROMPT_TPL = (
-    'Based on the following text, Generate a true/false statement in language "{language}".\n'
-    'The statement must target the keyword "{keyword}".\n'
-    'The correct answer must be "{target_response}".\n'
-    'Do NOT copy phrases from the original text - rephrase the concept in your own words.\n'
+    'Generate a single declarative statement in "{language}" (ISO 639-1). about the concept "{keyword}" based on the following text.\n'
+    'The statement must be factually {target_response} according to the text.\n'
+    '- If target is "True": the statement must be accurate and supported by the text.\n'
+    '- If target is "False": the statement must contain a subtle factual error that contradicts the text.\n'
+    '- Length: 1-2 sentences (15-40 words).\n'
+    '- Do NOT copy phrases verbatim from the text - rephrase in your own words.\n'
+    '- Use a clear, educational tone.\n'
     'Text:\n'
     '{text}\n\n'
     'Return ONLY valid JSON conforming to this schema:\n'
